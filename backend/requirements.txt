@@ -1,0 +1,11 @@
+fastapi
+fastapi
+uvicorn
+SQLAlchemy
+pandas
+openpyxl
+python-multipart
+SQLAlchemy
+pandas
+openpyxl
+python-dotenv

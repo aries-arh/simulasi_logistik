@@ -1,0 +1,16 @@
+{
+  "name": "Gemini Generated Logistics Setup",
+  "description": "A logistics setup with no manual tasks.",
+  "setup_data": {
+    "locations": [
+      {"name": "WW", "stock": {}},
+      {"name": "FA", "stock": {}}
+    ],
+    "transport_units": [
+      {"name": "Kururu 1", "type": "Kururu", "num_sub_units": 1, "capacity_per_sub_unit": 1},
+      {"name": "Kururu 2", "type": "Kururu", "num_sub_units": 1, "capacity_per_sub_unit": 1},
+      {"name": "Kururu 3", "type": "Kururu", "num_sub_units": 1, "capacity_per_sub_unit": 1}
+    ],
+    "tasks": []
+  }
+}

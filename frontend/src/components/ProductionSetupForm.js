@@ -1,0 +1,277 @@
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+
+const API_URL = 'http://localhost:8000';
+
+const FileUploader = ({ fileType, onUploadSuccess, currentFile }) => {
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleFileChange = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('file', file);
+    setUploading(true);
+    setError('');
+
+    try {
+      const response = await axios.post(`${API_URL}/upload/${fileType}`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      onUploadSuccess(file.name); // Mengirim nama file kembali ke parent
+    } catch (err) {
+      const errorMsg = err.response?.data?.detail || `Gagal mengunggah file.`;
+      setError(errorMsg);
+      console.error(`Error uploading ${fileType} file:`, err);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div className="mb-3">
+      <label htmlFor={`${fileType}-file`} className="form-label">{fileType.charAt(0).toUpperCase() + fileType.slice(1)} File</label>
+      <input type="file" className="form-control" id={`${fileType}-file`} onChange={handleFileChange} accept={fileType === 'schedule' ? '.csv' : '.txt'} />
+      {uploading && <div className="form-text">Mengunggah...</div>}
+      {error && <div className="form-text text-danger">{error}</div>}
+      {currentFile && !uploading && <div className="form-text text-success">File saat ini: {currentFile}</div>}
+    </div>
+  );
+};
+
+const ProductionSetupForm = ({ onStart, initialData, onBack, onManageMasterData }) => {
+  const [target, setTarget] = useState(1000);
+  // Change processes to lineProcesses, a dictionary
+  const [lineProcesses, setLineProcesses] = useState({}); 
+  
+  // State untuk file
+  const [scheduleFile, setScheduleFile] = useState('');
+  const [bomFile, setBomFile] = useState('');
+
+  const [masterProcessTemplates, setMasterProcessTemplates] = useState([]);
+  const [loadingMasterData, setLoadingMasterData] = useState(true);
+  const [masterDataError, setMasterDataError] = useState(null);
+
+  // New state for available lines and selected line
+  const [availableLines, setAvailableLines] = useState([]);
+  const [selectedLine, setSelectedLine] = useState('');
+
+  useEffect(() => {
+    const fetchMasterData = async () => {
+      setLoadingMasterData(true);
+      try {
+        const response = await axios.get(`${API_URL}/master/process-templates/`);
+        setMasterProcessTemplates(response.data);
+      } catch (err) {
+        setMasterDataError('Gagal mengambil daftar template proses.');
+      } finally {
+        setLoadingMasterData(false);
+      }
+    };
+    fetchMasterData();
+  }, []);
+
+  // New useEffect to fetch schedule summary and populate available lines
+  useEffect(() => {
+    const fetchScheduleSummary = async () => {
+      if (!scheduleFile) {
+        setAvailableLines([]);
+        setSelectedLine('');
+        setLineProcesses({}); // Clear line processes if no schedule file
+        return;
+      }
+      try {
+        const response = await axios.get(`${API_URL}/data/schedule/summary`);
+        const uniqueLines = response.data.summary.unique_lines || [];
+        setAvailableLines(uniqueLines);
+        if (uniqueLines.length > 0) {
+          setSelectedLine(uniqueLines[0]); // Select the first line by default
+          // Initialize lineProcesses for new lines if they don't exist
+          setLineProcesses(prev => {
+            const newLineProcs = { ...prev };
+            uniqueLines.forEach(line => {
+              if (!newLineProcs[line]) {
+                newLineProcs[line] = []; // Initialize with empty array for new lines
+              }
+            });
+            return newLineProcs;
+          });
+        } else {
+          setSelectedLine('');
+          setLineProcesses({});
+        }
+      } catch (err) {
+        console.error("Error fetching schedule summary:", err);
+        // Handle error, maybe show a message to the user
+      }
+    };
+    fetchScheduleSummary();
+  }, [scheduleFile]); // Re-run when scheduleFile changes
+
+  useEffect(() => {
+    if (initialData) {
+      setTarget(initialData.total_production_target || 1000);
+      setLineProcesses(initialData.line_processes || {});
+      setScheduleFile(initialData.schedule_file || '');
+      setBomFile(initialData.bom_file || '');
+    }
+  }, [initialData]);
+
+  const handleProcessChange = (index, event) => {
+    const { name, value } = event.target;
+    setLineProcesses(prevLineProcesses => {
+      const newLineProcesses = { ...prevLineProcesses };
+      const currentLineProcs = [...(newLineProcesses[selectedLine] || [])];
+      currentLineProcs[index] = { ...currentLineProcs[index], [name]: value };
+      newLineProcesses[selectedLine] = currentLineProcs;
+      return newLineProcesses;
+    });
+  };
+
+  const handleAddProcess = () => {
+    setLineProcesses(prevLineProcesses => {
+      const newLineProcesses = { ...prevLineProcesses };
+      const currentLineProcs = [...(newLineProcesses[selectedLine] || [])];
+      currentLineProcs.push({ name: '', cycle_time: 10, num_operators: 1, ng_rate: 0.01, input_from: [], output_to: [] });
+      newLineProcesses[selectedLine] = currentLineProcs;
+      return newLineProcesses;
+    });
+  };
+
+  const handleRemoveProcess = (index) => {
+    setLineProcesses(prevLineProcesses => {
+      const newLineProcesses = { ...prevLineProcesses };
+      const currentLineProcs = [...(newLineProcesses[selectedLine] || [])];
+      currentLineProcs.splice(index, 1);
+      newLineProcesses[selectedLine] = currentLineProcs;
+      return newLineProcesses;
+    });
+  };
+
+  const getCurrentConfig = () => ({
+    total_production_target: parseInt(target, 10),
+    line_processes: Object.entries(lineProcesses).reduce((acc, [lineName, processes]) => {
+      acc[lineName] = processes.map(p => ({
+        ...p,
+        cycle_time: parseInt(p.cycle_time, 10),
+        num_operators: parseInt(p.num_operators, 10),
+        ng_rate: parseFloat(p.ng_rate)
+      }));
+      return acc;
+    }, {}),
+    schedule_file: scheduleFile, // Menyertakan nama file jadwal
+    bom_file: bomFile,           // Menyertakan nama file BOM
+  });
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!scheduleFile || !bomFile) {
+        alert('Silakan unggah file Jadwal (Schedule) dan BOM terlebih dahulu.');
+        return;
+    }
+    // Validate that all available lines have at least one process defined
+    const allLinesConfigured = availableLines.every(line => lineProcesses[line] && lineProcesses[line].length > 0);
+    if (!allLinesConfigured) {
+      alert('Setiap lini produksi harus memiliki setidaknya satu proses yang dikonfigurasi.');
+      return;
+    }
+    onStart(getCurrentConfig());
+  };
+
+  // Get processes for the currently selected line
+  const currentLineProcesses = lineProcesses[selectedLine] || [];
+
+  return (
+    <div className="card shadow-sm">
+      <div className="card-body">
+        <div className="d-flex justify-content-between align-items-center mb-3">
+          <h2 className="card-title">Konfigurasi Simulasi Produksi</h2>
+          <button className="btn btn-secondary" onClick={onBack}>Kembali</button>
+        </div>
+        
+        <form onSubmit={handleSubmit}>
+          {/* File Uploaders */}
+          <div className="row">
+            <div className="col-md-6">
+                <FileUploader fileType="schedule" onUploadSuccess={setScheduleFile} currentFile={scheduleFile} />
+            </div>
+            <div className="col-md-6">
+                <FileUploader fileType="bom" onUploadSuccess={setBomFile} currentFile={bomFile} />
+            </div>
+          </div>
+          <hr />
+
+          {/* General Settings */}
+          <div className="mb-3">
+            <label htmlFor="target" className="form-label">Target Produksi Total (otomatis dari jadwal)</label>
+            <input type="number" className="form-control" id="target" value={target} onChange={(e) => setTarget(e.target.value)} disabled />
+            <div className="form-text">Nilai ini akan dihitung secara otomatis berdasarkan file jadwal yang diunggah.</div>
+          </div>
+          <hr />
+
+          {/* Line Selection */}
+          <div className="mb-3">
+            <label htmlFor="selectLine" className="form-label">Pilih Lini Produksi untuk Konfigurasi</label>
+            <select 
+              id="selectLine" 
+              className="form-select"
+              value={selectedLine}
+              onChange={(e) => setSelectedLine(e.target.value)}
+              disabled={availableLines.length === 0}
+            >
+              {availableLines.length === 0 ? (
+                <option value="">Unggah Jadwal untuk melihat lini</option>
+              ) : (
+                availableLines.map(line => (
+                  <option key={line} value={line}>{line}</option>
+                ))
+              )}
+            </select>
+          </div>
+
+          {/* Process Details for Selected Line */}
+          <h4 className="mt-3">Detail Proses untuk Lini: {selectedLine || 'Pilih Lini'}</h4>
+          {currentLineProcesses.map((process, index) => (
+            <div key={index} className="p-3 mb-3 border rounded bg-light">
+              <div className="d-flex justify-content-between align-items-center mb-2">
+                <h5>Proses #{index + 1}</h5>
+                <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => handleRemoveProcess(index)}>Hapus</button>
+              </div>
+              <div className="row">
+                 <div className="col-md-6 mb-2">
+                    <label className="form-label">Nama Proses</label>
+                    <input type="text" className="form-control" name="name" value={process.name} onChange={(e) => handleProcessChange(index, e)} placeholder="cth: Assembly, Packing"/>
+                </div>
+                <div className="col-md-6 mb-2">
+                    <label className="form-label">Waktu Proses (detik)</label>
+                    <input type="number" className="form-control" name="cycle_time" value={process.cycle_time} onChange={(e) => handleProcessChange(index, e)} />
+                </div>
+                 <div className="col-md-6 mb-2">
+                    <label className="form-label">Jumlah Operator</label>
+                    <input type="number" className="form-control" name="num_operators" value={process.num_operators} onChange={(e) => handleProcessChange(index, e)} />
+                </div>
+                <div className="col-md-6 mb-2">
+                    <label className="form-label">Rate NG (cth: 0.05)</label>
+                    <input type="number" step="0.01" className="form-control" name="ng_rate" value={process.ng_rate} onChange={(e) => handleProcessChange(index, e)} />
+                </div>
+                {/* Connection fields can be added here if needed */}
+              </div>
+            </div>
+          ))}
+
+          <button type="button" className="btn btn-success w-100 mb-3" onClick={handleAddProcess} disabled={!selectedLine}>+ Tambah Proses untuk Lini {selectedLine || 'yang Dipilih'}</button>
+
+          <div className="d-grid">
+            <button type="submit" className="btn btn-primary fw-bold" disabled={!selectedLine || availableLines.length === 0}>Mulai Simulasi</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+export default ProductionSetupForm;

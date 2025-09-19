@@ -1,0 +1,30 @@
+{
+  "name": "Gemini Generated Production Setup",
+  "description": "A production setup with one process for each line.",
+  "setup_data": {
+    "line_processes": {
+      "FA1-L01": [{"name": "Assembly", "cycle_time": 60, "num_operators": 1, "input_from": [], "output_to": []}],
+      "FA1-L02": [{"name": "Assembly", "cycle_time": 60, "num_operators": 1, "input_from": [], "output_to": []}],
+      "FA1-L03": [{"name": "Assembly", "cycle_time": 60, "num_operators": 1, "input_from": [], "output_to": []}],
+      "FA1-L04": [{"name": "Assembly", "cycle_time": 60, "num_operators": 1, "input_from": [], "output_to": []}],
+      "FA1-L05": [{"name": "Assembly", "cycle_time": 60, "num_operators": 1, "input_from": [], "output_to": []}],
+      "FA1-L06": [{"name": "Assembly", "cycle_time": 60, "num_operators": 1, "input_from": [], "output_to": []}],
+      "FA1-L07": [{"name": "Assembly", "cycle_time": 60, "num_operators": 1, "input_from": [], "output_to": []}],
+      "FA1-L08": [{"name": "Assembly", "cycle_time": 60, "num_operators": 1, "input_from": [], "output_to": []}],
+      "FA1-L09": [{"name": "Assembly", "cycle_time": 60, "num_operators": 1, "input_from": [], "output_to": []}],
+      "FA1-L10": [{"name": "Assembly", "cycle_time": 60, "num_operators": 1, "input_from": [], "output_to": []}],
+      "FA1-L11A": [{"name": "Assembly", "cycle_time": 60, "num_operators": 1, "input_from": [], "output_to": []}],
+      "FA1-L11B": [{"name": "Assembly", "cycle_time": 60, "num_operators": 1, "input_from": [], "output_to": []}],
+      "FA1-L12A": [{"name": "Assembly", "cycle_time": 60, "num_operators": 1, "input_from": [], "output_to": []}],
+      "FA1-L12B": [{"name": "Assembly", "cycle_time": 60, "num_operators": 1, "input_from": [], "output_to": []}],
+      "FA1-L13D": [{"name": "Assembly", "cycle_time": 60, "num_operators": 1, "input_from": [], "output_to": []}],
+      "FA1-L13E": [{"name": "Assembly", "cycle_time": 60, "num_operators": 1, "input_from": [], "output_to": []}],
+      "FA1-L12C": [{"name": "Assembly", "cycle_time": 60, "num_operators": 1, "input_from": [], "output_to": []}],
+      "FA1-L12D": [{"name": "Assembly", "cycle_time": 60, "num_operators": 1, "input_from": [], "output_to": []}],
+      "Line Ikat": [{"name": "Assembly", "cycle_time": 60, "num_operators": 1, "input_from": [], "output_to": []}],
+      "Line Screw Set": [{"name": "Assembly", "cycle_time": 60, "num_operators": 1, "input_from": [], "output_to": []}],
+      "Line Pedal (Reguler)": [{"name": "Assembly", "cycle_time": 60, "num_operators": 1, "input_from": [], "output_to": []}],
+      "Line Pedal (22PDL)": [{"name": "Assembly", "cycle_time": 60, "num_operators": 1, "input_from": [], "output_to": []}]
+    }
+  }
+}

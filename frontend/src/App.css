@@ -1,0 +1,509 @@
+/* Modern Production Simulator Styles */
+.App {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.main-container {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  border-radius: 20px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+  margin: 20px auto;
+  padding: 30px;
+  min-height: calc(100vh - 40px);
+  max-width: 960px; /* Batasi lebar maksimum */
+  width: 95%; /* Gunakan 95% dari lebar viewport */
+  border: 1px solid #ddd; /* Subtle frame */
+}
+
+/* Desktop adjustments */
+@media (min-width: 992px) {
+  .simulation-card .p-3 {
+    padding: 1.5rem !important;
+  }
+  
+  .simulation-card .p-2 {
+    padding: 1.25rem !important;
+  }
+  
+  .data-summary-card .p-2 {
+    padding: 1.25rem !important;
+  }
+  
+  .process-card .p-2 {
+    padding: 1.25rem !important;
+  }
+}
+
+/* Large desktop adjustments */
+@media (min-width: 1200px) {
+  .simulation-card .p-3 {
+    padding: 1.75rem !important;
+  }
+  
+  .simulation-card .p-2 {
+    padding: 1.5rem !important;
+  }
+  
+  .data-summary-card .p-2 {
+    padding: 1.5rem !important;
+  }
+  
+  .process-card .p-2 {
+    padding: 1.5rem !important;
+  }
+}
+
+/* Tablet adjustments */
+@media (min-width: 768px) and (max-width: 991px) {
+  .main-container {
+    max-width: 100%;
+    margin: 15px;
+    padding: 25px;
+  }
+  
+  .header-section {
+    margin-bottom: 25px;
+    padding: 22px 0;
+  }
+  
+  .simulation-card .p-3 {
+    padding: 1.25rem !important;
+  }
+  
+  .simulation-card .p-2 {
+    padding: 1rem !important;
+  }
+  
+  .data-summary-card .p-2 {
+    padding: 1rem !important;
+  }
+  
+  .process-card .p-2 {
+    padding: 1rem !important;
+  }
+}
+
+/* Extra large desktop adjustments */
+@media (min-width: 1400px) {
+  .simulation-card .p-3 {
+    padding: 2rem !important;
+  }
+  
+  .simulation-card .p-2 {
+    padding: 1.75rem !important;
+  }
+  
+  .data-summary-card .p-2 {
+    padding: 1.75rem !important;
+  }
+  
+  .process-card .p-2 {
+    padding: 1.75rem !important;
+  }
+}
+
+.header-section {
+  text-align: center;
+  margin-bottom: 40px;
+  padding: 30px 0;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: 15px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+}
+
+.header-section h1 {
+  font-size: 2.5rem;
+  font-weight: 700;
+  margin-bottom: 10px;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.header-section p {
+  font-size: 1.2rem;
+  opacity: 0.9;
+  margin: 0;
+}
+
+.simulation-card {
+  background: white;
+  border-radius: 15px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+  border: none;
+  transition: all 0.3s ease;
+  overflow: hidden;
+}
+
+.simulation-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+}
+
+.btn-modern {
+  border-radius: 25px;
+  padding: 12px 30px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  transition: all 0.3s ease;
+  border: none;
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-modern:before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.5s;
+}
+
+.btn-modern:hover:before {
+  left: 100%;
+}
+
+.btn-primary-modern {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.btn-success-modern {
+  background: linear-gradient(135deg, #56ab2f 0%, #a8e6cf 100%);
+  color: white;
+}
+
+.btn-info-modern {
+  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+  color: white;
+}
+
+.btn-secondary-modern {
+  background: linear-gradient(135deg, #bdc3c7 0%, #2c3e50 100%);
+  color: white;
+}
+
+.btn-warning-modern {
+  background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%);
+  color: white;
+}
+
+.status-card {
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  color: white;
+  border-radius: 15px;
+  padding: 15px;
+  margin: 8px 0;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+}
+
+.progress-modern {
+  height: 15px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.2);
+  overflow: hidden;
+}
+
+.progress-bar-modern {
+  background: linear-gradient(90deg, #56ab2f, #a8e6cf);
+  border-radius: 8px;
+  transition: width 0.5s ease;
+}
+
+.metric-card {
+  background: white;
+  border-radius: 15px;
+  padding: 15px;
+  text-align: center;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+  transition: all 0.3s ease;
+  border-left: 5px solid #667eea;
+}
+
+.metric-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+}
+
+.metric-value {
+  font-size: 2rem;
+  font-weight: 700;
+  margin: 8px 0;
+}
+
+.metric-label {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #666;
+  font-weight: 600;
+}
+
+.process-card {
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border-radius: 15px;
+  padding: 15px;
+  margin: 8px 0;
+  border: 2px solid transparent;
+  transition: all 0.3s ease;
+}
+
+.process-card:hover {
+  border-color: #667eea;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+}
+
+.chart-container {
+  background: white;
+  border-radius: 15px;
+  padding: 15px;
+  margin: 15px 0;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+}
+
+.loading-spinner {
+  display: inline-block;
+  width: 40px;
+  height: 40px;
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #667eea;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.loading-spinner-sm {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border: 2px solid #f3f3f3;
+  border-top: 2px solid #667eea;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.loading-spinner-lg {
+  display: inline-block;
+  width: 60px;
+  height: 60px;
+  border: 6px solid #f3f3f3;
+  border-top: 6px solid #667eea;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.alert-modern {
+  border-radius: 15px;
+  border: none;
+  padding: 15px;
+  margin: 15px 0;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+}
+
+.alert-danger-modern {
+  background: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%);
+  color: white;
+}
+
+.alert-info-modern {
+  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+  color: white;
+}
+
+.alert-success-modern {
+  background: linear-gradient(135deg, #56ab2f 0%, #a8e6cf 100%);
+  color: white;
+}
+
+/* Modal Styles */
+.modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 1040;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-dialog {
+  background-color: white;
+  padding: 15px;
+  border-radius: 8px;
+  z-index: 1050;
+  width: 90%;
+  max-width: 600px;
+  max-height: 90vh; /* Add max-height to the dialog */
+  display: flex; /* Use flexbox for layout */
+  flex-direction: column;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #dee2e6;
+  padding-bottom: 0.75rem;
+  flex-shrink: 0; /* Prevent header from shrinking */
+}
+
+.modal-body {
+  padding-top: 0.75rem;
+  overflow-y: auto; /* Let the body scroll */
+  flex-grow: 1; /* Allow body to take up available space */
+}
+
+.modal-footer {
+  border-top: 1px solid #dee2e6;
+  padding-top: 0.75rem;
+  text-align: right;
+  flex-shrink: 0; /* Prevent footer from shrinking */
+}
+
+.btn-close {
+    border: none;
+    background: transparent;
+    font-size: 1.5rem;
+}
+
+/* Global container adjustments for better spacing */
+.container-fluid {
+    padding-left: 15px;
+    padding-right: 15px;
+}
+
+.row {
+    margin-left: -10px;
+    margin-right: -10px;
+}
+
+.col, .col-1, .col-2, .col-3, .col-4, .col-5, .col-6, .col-7, .col-8, .col-9, .col-10, .col-11, .col-12,
+.col-auto, .col-sm, .col-sm-1, .col-sm-2, .col-sm-3, .col-sm-4, .col-sm-5, .col-sm-6, .col-sm-7, .col-sm-8, .col-sm-9, .col-sm-10, .col-sm-11, .col-sm-12, .col-sm-auto,
+.col-md, .col-md-1, .col-md-2, .col-md-3, .col-md-4, .col-md-5, .col-md-6, .col-md-7, .col-md-8, .col-md-9, .col-md-10, .col-md-11, .col-md-12, .col-md-auto,
+.col-lg, .col-lg-1, .col-lg-2, .col-lg-3, .col-lg-4, .col-lg-5, .col-lg-6, .col-lg-7, .col-lg-8, .col-lg-9, .col-lg-10, .col-lg-11, .col-lg-12, .col-lg-auto,
+.col-xl, .col-xl-1, .col-xl-2, .col-xl-3, .col-xl-4, .col-xl-5, .col-xl-6, .col-xl-7, .col-xl-8, .col-xl-9, .col-xl-10, .col-xl-11, .col-xl-12, .col-xl-auto {
+    padding-left: 10px;
+    padding-right: 10px;
+}
+
+/* Responsive adjustments for smaller screens */
+@media (max-width: 768px) {
+    .main-container {
+        margin: 10px;
+        padding: 20px;
+        width: calc(100% - 20px);
+    }
+    
+    .row {
+        margin-left: -5px;
+        margin-right: -5px;
+    }
+    
+    .col, .col-1, .col-2, .col-3, .col-4, .col-5, .col-6, .col-7, .col-8, .col-9, .col-10, .col-11, .col-12,
+    .col-auto, .col-sm, .col-sm-1, .col-sm-2, .col-sm-3, .col-sm-4, .col-sm-5, .col-sm-6, .col-sm-7, .col-sm-8, .col-sm-9, .col-sm-10, .col-sm-11, .col-sm-12, .col-sm-auto,
+    .col-md, .col-md-1, .col-md-2, .col-md-3, .col-md-4, .col-md-5, .col-md-6, .col-md-7, .col-md-8, .col-md-9, .col-md-10, .col-md-11, .col-md-12, .col-md-auto,
+    .col-lg, .col-lg-1, .col-lg-2, .col-lg-3, .col-lg-4, .col-lg-5, .col-lg-6, .col-lg-7, .col-lg-8, .col-lg-9, .col-lg-10, .col-lg-11, .col-lg-12, .col-lg-auto,
+    .col-xl, .col-xl-1, .col-xl-2, .col-xl-3, .col-xl-4, .col-xl-5, .col-xl-6, .col-xl-7, .col-xl-8, .col-xl-9, .col-xl-10, .col-xl-11, .col-xl-12, .col-xl-auto {
+        padding-left: 5px;
+        padding-right: 5px;
+    }
+    
+    .simulation-card .p-3 {
+        padding: 1rem !important;
+    }
+    
+    .simulation-card .p-2 {
+        padding: 0.75rem !important;
+    }
+    
+    .data-summary-card .p-2 {
+        padding: 0.75rem !important;
+    }
+    
+    .process-card .p-2 {
+        padding: 0.75rem !important;
+    }
+}
+
+/* Utility classes for compact layout */
+.compact-container {
+    margin: 0 auto;
+    padding: 0 15px;
+}
+
+.compact-row {
+    margin-left: -8px;
+    margin-right: -8px;
+}
+
+.compact-col {
+    padding-left: 8px;
+    padding-right: 8px;
+}
+
+/* Form adjustments for better spacing */
+.form-group {
+    margin-bottom: 0.75rem;
+}
+
+.form-control, .form-select {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.9rem;
+}
+
+.form-label {
+    margin-bottom: 0.5rem;
+    font-size: 0.9rem;
+}
+
+.form-check {
+    margin-bottom: 0.5rem;
+}
+
+.form-check-label {
+    font-size: 0.9rem;
+}
+
+/* Card spacing adjustments */
+.card {
+    margin-bottom: 1rem;
+}
+
+.card-body {
+    padding: 1rem;
+}
+
+/* Button spacing */
+.btn {
+    margin-bottom: 0.5rem;
+    font-size: 0.9rem;
+    padding: 0.5rem 1rem;
+}
+
+.btn + .btn {
+    margin-left: 0.5rem;
+}
+
+.btn-lg {
+    padding: 0.75rem 1.5rem;
+    font-size: 1rem;
+}
+
+.btn-sm {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.8rem;
+}

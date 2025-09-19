@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Debug Tool</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .loading { background-color: #fff3cd; border-color: #ffeaa7; }
+        button { padding: 10px 15px; margin: 5px; cursor: pointer; }
+        pre { background-color: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>🔧 Production Simulator API Debug Tool</h1>
+    
+    <div class="test-section">
+        <h3>Backend Health Check</h3>
+        <button onclick="testHealth()">Test Health</button>
+        <div id="health-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>Production Setups API</h3>
+        <button onclick="testProductionSetups()">Test Production Setups</button>
+        <div id="prod-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>Logistics Setups API</h3>
+        <button onclick="testLogisticsSetups()">Test Logistics Setups</button>
+        <div id="log-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>Master Data APIs</h3>
+        <button onclick="testMasterData()">Test Master Data</button>
+        <div id="master-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>All APIs Test</h3>
+        <button onclick="testAllAPIs()">Test All APIs</button>
+        <div id="all-result"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000';
+        
+        async function makeRequest(url, method = 'GET') {
+            try {
+                const response = await fetch(url, {
+                    method: method,
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    return { success: true, data: data, status: response.status };
+                } else {
+                    return { success: false, error: `HTTP ${response.status}: ${response.statusText}`, status: response.status };
+                }
+            } catch (error) {
+                return { success: false, error: error.message };
+            }
+        }
+
+        function showResult(elementId, result) {
+            const element = document.getElementById(elementId);
+            if (result.success) {
+                element.className = 'test-section success';
+                element.innerHTML = `
+                    <h4>✅ Success (${result.status})</h4>
+                    <pre>${JSON.stringify(result.data, null, 2)}</pre>
+                `;
+            } else {
+                element.className = 'test-section error';
+                element.innerHTML = `
+                    <h4>❌ Error</h4>
+                    <p><strong>Status:</strong> ${result.status || 'N/A'}</p>
+                    <p><strong>Error:</strong> ${result.error}</p>
+                `;
+            }
+        }
+
+        async function testHealth() {
+            const element = document.getElementById('health-result');
+            element.className = 'test-section loading';
+            element.innerHTML = '<h4>🔄 Testing...</h4>';
+            
+            const result = await makeRequest(`${API_BASE}/health`);
+            showResult('health-result', result);
+        }
+
+        async function testProductionSetups() {
+            const element = document.getElementById('prod-result');
+            element.className = 'test-section loading';
+            element.innerHTML = '<h4>🔄 Testing...</h4>';
+            
+            const result = await makeRequest(`${API_BASE}/setups/production/`);
+            showResult('prod-result', result);
+        }
+
+        async function testLogisticsSetups() {
+            const element = document.getElementById('log-result');
+            element.className = 'test-section loading';
+            element.innerHTML = '<h4>🔄 Testing...</h4>';
+            
+            const result = await makeRequest(`${API_BASE}/setups/logistics/`);
+            showResult('log-result', result);
+        }
+
+        async function testMasterData() {
+            const element = document.getElementById('master-result');
+            element.className = 'test-section loading';
+            element.innerHTML = '<h4>🔄 Testing...</h4>';
+            
+            const [locations, transportUnits, processTemplates] = await Promise.all([
+                makeRequest(`${API_BASE}/master/locations/`),
+                makeRequest(`${API_BASE}/master/transport-units/`),
+                makeRequest(`${API_BASE}/master/process-templates/`)
+            ]);
+            
+            const allSuccess = locations.success && transportUnits.success && processTemplates.success;
+            
+            if (allSuccess) {
+                element.className = 'test-section success';
+                element.innerHTML = `
+                    <h4>✅ All Master Data APIs Working</h4>
+                    <h5>Locations (${locations.data.length}):</h5>
+                    <pre>${JSON.stringify(locations.data, null, 2)}</pre>
+                    <h5>Transport Units (${transportUnits.data.length}):</h5>
+                    <pre>${JSON.stringify(transportUnits.data, null, 2)}</pre>
+                    <h5>Process Templates (${processTemplates.data.length}):</h5>
+                    <pre>${JSON.stringify(processTemplates.data, null, 2)}</pre>
+                `;
+            } else {
+                element.className = 'test-section error';
+                element.innerHTML = `
+                    <h4>❌ Some Master Data APIs Failed</h4>
+                    <p><strong>Locations:</strong> ${locations.success ? '✅' : '❌'} ${locations.error || 'OK'}</p>
+                    <p><strong>Transport Units:</strong> ${transportUnits.success ? '✅' : '❌'} ${transportUnits.error || 'OK'}</p>
+                    <p><strong>Process Templates:</strong> ${processTemplates.success ? '✅' : '❌'} ${processTemplates.error || 'OK'}</p>
+                `;
+            }
+        }
+
+        async function testAllAPIs() {
+            const element = document.getElementById('all-result');
+            element.className = 'test-section loading';
+            element.innerHTML = '<h4>🔄 Testing All APIs...</h4>';
+            
+            const results = await Promise.all([
+                makeRequest(`${API_BASE}/health`),
+                makeRequest(`${API_BASE}/setups/production/`),
+                makeRequest(`${API_BASE}/setups/logistics/`),
+                makeRequest(`${API_BASE}/master/locations/`),
+                makeRequest(`${API_BASE}/master/transport-units/`),
+                makeRequest(`${API_BASE}/master/process-templates/`)
+            ]);
+            
+            const successCount = results.filter(r => r.success).length;
+            const totalCount = results.length;
+            
+            if (successCount === totalCount) {
+                element.className = 'test-section success';
+                element.innerHTML = `
+                    <h4>✅ All APIs Working (${successCount}/${totalCount})</h4>
+                    <p>🎉 Your Production Simulator API is fully functional!</p>
+                `;
+            } else {
+                element.className = 'test-section error';
+                element.innerHTML = `
+                    <h4>❌ Some APIs Failed (${successCount}/${totalCount})</h4>
+                    <p>Please check the individual test results above for details.</p>
+                `;
+            }
+        }
+
+        // Auto-run health check on page load
+        window.onload = function() {
+            testHealth();
+        };
+    </script>
+</body>
+</html>
