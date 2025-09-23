@@ -15,6 +15,7 @@ function App() {
   const [comparisonData, setComparisonData] = useState(null);
 
   const handleProductionSimulationStart = (config) => {
+    // Ensure all properties, including file names, are preserved.
     setSimulationConfig(config);
     setMainView('production_display');
   };

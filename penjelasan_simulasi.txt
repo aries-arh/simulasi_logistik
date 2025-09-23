@@ -1,0 +1,80 @@
+### **Informasi Detail Mengenai Alur Simulasi**
+
+Berdasarkan nama-nama file, aplikasi ini menjalankan **simulasi berbasis kejadian diskrit (Discrete Event Simulation)**. Artinya, simulasi berjalan dengan memproses kejadian (event) satu per satu dalam urutan waktu.
+
+Konsep intinya adalah meniru alur kerja di pabrik:
+1.  **Input Perintah Kerja**: Simulasi dimulai dengan membaca "apa yang harus diproduksi" dan "kapan".
+2.  **Permintaan Material**: Sistem secara otomatis menghitung material apa saja yang dibutuhkan untuk perintah kerja tersebut.
+3.  **Proses Logistik**: Unit transportasi (seperti AGV/forklift) diperintahkan untuk mengambil material dari gudang (`bin code`) dan mengantarkannya ke lini produksi.
+4.  **Proses Produksi**: Mesin di lini produksi merakit material menjadi produk jadi.
+5.  **Output & Analisis**: Simulasi menghasilkan data performa, seperti waktu siklus, utilitas mesin, waktu tunggu, dan potensi hambatan (bottleneck).
+
+Alur ini dipecah menjadi dua sub-sistem utama yang terintegrasi:
+
+*   **Simulasi Produksi**: Fokus pada proses di dalam stasiun kerja/mesin. Mengelola urutan produksi, waktu proses per unit, waktu setup/ganti model, dan status mesin (bekerja, idle, rusak).
+*   **Simulasi Logistik**: Fokus pada pergerakan material antar lokasi. Mengelola tugas untuk unit transportasi, mencari rute terpendek, menghitung waktu tempuh, dan mengelola status unit (mengantar, kembali, mengisi daya, idle).
+
+---
+
+### **Struktur File Simulasi dan Peranannya**
+
+Berikut adalah pemetaan file-file kunci ke dalam alur simulasi:
+
+#### **1. File Logika Inti (di dalam `backend/`)**
+
+File-file ini berisi "otak" dari simulasi.
+
+*   `simulation.py`
+    *   **Peran**: **Orkestrator Simulasi Utama**.
+    *   **Detail**: File ini kemungkinan besar berisi loop simulasi utama. Ia bertugas memajukan "waktu" simulasi, memicu kejadian baru, dan mengoordinasikan interaksi antara modul produksi dan logistik. Misalnya, ketika `simulation.py` mendeteksi sebuah mesin membutuhkan material, ia akan memanggil `logistics_simulation.py` untuk membuat tugas pengantaran.
+
+*   `logistics_simulation.py`
+    *   **Peran**: **Mesin Simulasi Logistik**.
+    *   **Detail**: Mengelola semua logika yang terkait dengan pergerakan. Ini termasuk:
+        *   Manajemen antrian tugas untuk unit transportasi.
+        *   Algoritma pencarian rute (pathfinding).
+        *   Menghitung estimasi waktu tiba (ETA).
+        *   Memperbarui posisi dan status setiap unit transportasi dari waktu ke waktu.
+        *   File `test_path.py` dan `test_idle_vehicles.py` mengindikasikan adanya pengujian spesifik untuk fungsionalitas ini.
+
+*   `data_loader.py`
+    *   **Peran**: **Pemuat Data Universal**.
+    *   **Detail**: Bertanggung jawab untuk membaca file-file input umum seperti jadwal produksi dari file `.csv` atau `.xlsx` dan data reservasi material. Ia mengubah data mentah dari file menjadi objek Python yang siap digunakan oleh simulasi.
+
+*   `bom_parser.py`
+    *   **Peran**: **Parser Khusus untuk Bill of Materials (BOM)**.
+    *   **Detail**: File ini secara spesifik dirancang untuk membaca dan mengurai file `YMATP0200B_BOM_*.txt`. File BOM seringkali memiliki format yang kompleks dan tidak standar. Tugas file ini adalah mengekstrak "resep" produk: komponen apa saja yang dibutuhkan untuk membuat satu unit produk jadi.
+
+#### **2. File Input Data (di dalam direktori root `D:\APLIKASI PYTHON\production_simulator16\`)**
+
+Ini adalah data mentah yang menjadi "bahan bakar" untuk simulasi.
+
+*   `*Schedule*.csv` / `*.xls` (e.g., `20250915-Schedule FA1.csv`)
+    *   **Peran**: **Jadwal Produksi**.
+    *   **Detail**: Memberi tahu simulasi produk apa yang harus dibuat, berapa jumlahnya, dan urutannya.
+
+*   `YMATP0200B_BOM_*.txt`
+    *   **Peran**: **Bill of Materials**.
+    *   **Detail**: Berisi daftar semua komponen atau material mentah yang diperlukan untuk merakit satu produk jadi. Ini adalah "resep" dari produk.
+
+*   `MRP_*.txt` (e.g., `MRP_20250918.txt`)
+    *   **Peran**: **Material Requirements Planning**.
+    *   **Detail**: Berisi data perencanaan kebutuhan material. Simulasi mungkin menggunakan ini untuk memverifikasi ketersediaan material atau merencanakan permintaan di masa depan.
+
+*   `reservasi*.csv` (e.g., `reservasi with bin code 09 sep 2025 - Copy test.csv`)
+    *   **Peran**: **Daftar Alokasi Material**.
+    *   **Detail**: File ini sangat penting. Ia menghubungkan perintah produksi dengan stok fisik di gudang. Isinya kemungkinan adalah daftar material yang sudah "dipesan" untuk produksi, lengkap dengan lokasi penyimpanannya (`bin code`). Ini menjadi input utama untuk simulasi logistik.
+
+#### **3. File Konfigurasi (di dalam direktori root)**
+
+File-file ini memungkinkan Anda untuk mengubah parameter simulasi tanpa harus mengubah kode.
+
+*   `production_setup.json`
+    *   **Peran**: **Konfigurasi Simulasi Produksi**.
+    *   **Detail**: Berisi parameter seperti kecepatan mesin, waktu yang dibutuhkan untuk setup antar model, tingkat kegagalan mesin (jika ada), jumlah operator, dll.
+
+*   `logistics_setup.json`
+    *   **Peran**: **Konfigurasi Simulasi Logistik**.
+    *   **Detail**: Berisi parameter seperti jumlah unit transportasi, kecepatan, kapasitas angkut, waktu pengisian baterai, dan mungkin peta/layout dari pabrik (daftar lokasi dan jarak antar lokasi).
+
+Dengan memahami peran setiap file ini, Anda dapat melihat bagaimana data mengalir dari file input, diproses oleh logika di backend, dan dikonfigurasi melalui file JSON untuk menghasilkan sebuah simulasi yang utuh.

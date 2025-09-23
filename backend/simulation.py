@@ -16,6 +16,9 @@ class SimulationEngine:
         self.material_request_queue = material_request_queue
 
         self.schedule_df = load_schedule(schedule_file)
+
+        # Ensure all column names are strings to prevent errors on integer-based columns
+        self.schedule_df.columns = self.schedule_df.columns.map(str)
         self.bom_data = load_bom(bom_file)
         
         if self.schedule_df.empty or not self.bom_data:
@@ -41,13 +44,24 @@ class SimulationEngine:
 
     def _initialize_lines_and_orders(self):
         orders_by_line = self._create_production_orders_by_line()
+
+        # Sanitize keys in the setup data by stripping whitespace
+        sanitized_line_processes = {k.strip(): v for k, v in self.setup.line_processes.items()}
+
         for line_name, orders in orders_by_line.items():
-            line = self.lines[line_name]
+            line = self.lines[line_name] # Use original line_name for the main dictionary
             line["production_orders"] = orders
             line["total_line_target"] = len(orders)
             line["status"] = "running"
-            # Get processes specific to this line, or an empty list if none defined
-            for process_config in self.setup.line_processes.get(line_name, []):
+
+            # Use the stripped version for lookup
+            stripped_line_name = line_name.strip()
+            processes_for_line = sanitized_line_processes.get(stripped_line_name, [])
+
+            if not processes_for_line:
+                print(f"CRITICAL WARNING: No processes found for line '{stripped_line_name}' from the schedule. This line will not produce anything.")
+
+            for process_config in processes_for_line:
                 line["processes"][process_config.name] = {
                     "config": process_config,
                     "queue_in": defaultdict(deque),
@@ -63,37 +77,29 @@ class SimulationEngine:
         orders_by_line = defaultdict(deque)
         self.schedule_df['ST_numeric'] = pd.to_numeric(self.schedule_df['ST'], errors='coerce').fillna(60)
 
-        # Determine current day of week (0=Monday, 6=Sunday)
-        current_day = datetime.now().weekday()
-        # Map weekday to schedule column (Monday=0 -> SCH_Mon, Sunday=6 -> SCH_Sun)
-        day_column_map = {
-            0: 'SCH_Mon',  # Monday
-            1: 'SCH_Tue',  # Tuesday
-            2: 'SCH_Wed',  # Wednesday
-            3: 'SCH_Thu',  # Thursday
-            4: 'SCH_Fri',  # Friday
-            5: 'SCH_Sat',  # Saturday
-            6: 'SCH_Sun'   # Sunday
-        }
+        # --- CORRECTED LOGIC: Use day of week to find column ---
+        from datetime import datetime
+        day_of_week = datetime.now().strftime('%a') # e.g., 'Mon', 'Tue'
+        today_column = f"SCH_{day_of_week}"
 
-        # Get the schedule column for today
-        today_column = day_column_map.get(current_day)
-        if not today_column:
-            print(f"Warning: Could not determine schedule column for weekday {current_day}")
+        if today_column not in self.schedule_df.columns:
+            print(f"INFO: No schedule column found for today '{today_column}'. No production orders will be loaded.")
             return orders_by_line
 
-        print(f"Loading production schedule for today ({today_column})")
+        print(f"INFO: Loading production orders for today's schedule column: {today_column}")
 
-        # Only process today's schedule column
-        if today_column in self.schedule_df.columns:
-            self.schedule_df[today_column] = pd.to_numeric(self.schedule_df[today_column], errors='coerce').fillna(0)
-            for _, row in self.schedule_df.iterrows():
+        # Convert today's column to numeric
+        self.schedule_df[today_column] = pd.to_numeric(self.schedule_df[today_column], errors='coerce').fillna(0)
+
+        # Only process today's schedule
+        for _, row in self.schedule_df.iterrows():
+            try:
                 quantity = int(row[today_column])
                 if quantity > 0:
                     line_name = row['LINE']
                     model = row['MODEL']
                     part_no = row['PART NO']
-                    print(f"Adding {quantity} units of {part_no} (Model: {model}) to line {line_name}")
+                    print(f"Adding {quantity} units of {part_no} (Model: {model}) to line {line_name} for today")
                     for _ in range(quantity):
                         orders_by_line[line_name].append({
                             'part_no': part_no,
@@ -102,8 +108,8 @@ class SimulationEngine:
                             'st': row['ST_numeric'],
                             'status': 'pending'
                         })
-        else:
-            print(f"Warning: Schedule column {today_column} not found in schedule file")
+            except (ValueError, TypeError, KeyError):
+                continue
 
         return orders_by_line
 
@@ -167,9 +173,11 @@ class SimulationEngine:
             for process_name in line_data["processes"]:
                 self.start_new_units(line_name, process_name)
         if self.total_production_target > 0 and (self.completed_units + self.scrapped_units) >= self.total_production_target:
+            print(f"INFO: Production target of {self.total_production_target} reached. Finishing simulation.")
             self.status = "finished"
 
     def start_new_units(self, line_name: str, process_name: str):
+        print(f"DEBUG: start_new_units called for line '{line_name}', process '{process_name}'")
         line_data = self.lines[line_name]
         process_data = line_data["processes"][process_name]
         config = process_data["config"]
@@ -200,7 +208,11 @@ class SimulationEngine:
                 # THEREFORE, WE MUST CHECK FOR MATERIALS.
                 order = line_data["production_orders"][0]
                 part_no = order['part_no']
+                print(f"DEBUG: Checking materials for part: {part_no} on line: {line_name}")
                 bom_for_part = self.bom_data.get(part_no, [])
+
+                if not bom_for_part:
+                    print(f"WARNING: No BOM found for part {part_no}. Production will proceed without material consumption.")
 
                 if bom_for_part:
                     has_all_materials = True
@@ -220,6 +232,7 @@ class SimulationEngine:
                     
                     if not has_all_materials:
                         if materials_to_request:
+                            print(f"DEBUG: Production requesting materials: {materials_to_request}")
                             self.material_request_queue.extend(materials_to_request)
                             for req in materials_to_request:
                                 process_data["pending_requests"].add(req['material'])

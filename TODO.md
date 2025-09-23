@@ -3,7 +3,12 @@
 ## Phase 1: Fix material request processing for parallel vehicle operations
 - [x] Review and optimize _process_material_requests in logistics_simulation.py to ensure all pending requests are processed efficiently
 - [x] Verify and improve task assignment logic in run_step to assign tasks to multiple idle transport units simultaneously
+- [x] Add logic to handle units not at origin by adding traveling_to_origin status
 - [x] Test parallel vehicle operations in integrated simulation
+- [x] Fix destination location mapping for integrated mode (override to 'ASSEMBLY')
+- [x] Fix integrated_mode attribute initialization
+- [x] Remove incorrect scaling in BOM quantity parsing
+- [x] Vehicles are now active and processing tasks correctly in integrated simulation
 
 ## Phase 2: Implement real-time synchronization improvements
 - [x] Add asyncio-based real-time synchronization between production and logistics simulations

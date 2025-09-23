@@ -257,6 +257,42 @@ def delete_process_template(template_id: int, db: Session = Depends(get_db)):
     db.commit()
     return {"ok": True}
 
+@app.get("/master/locations/", response_model=List[MasterLocation])
+def get_all_locations(db: Session = Depends(get_db)):
+    locations = db.query(MasterLocationDB).all()
+    return [MasterLocation.from_orm(l) for l in locations]
+
+@app.post("/master/locations/", response_model=MasterLocation, status_code=status.HTTP_201_CREATED)
+def create_location(location: MasterLocationCreate, db: Session = Depends(get_db)):
+    db_location = MasterLocationDB(**location.dict())
+    db.add(db_location)
+    db.commit()
+    db.refresh(db_location)
+    return db_location
+
+@app.get("/master/transport-units/", response_model=List[MasterTransportUnit])
+def get_all_transport_units(db: Session = Depends(get_db)):
+    units = db.query(MasterTransportUnitDB).all()
+    return [MasterTransportUnit.from_orm(u) for u in units]
+
+@app.post("/master/transport-units/", response_model=MasterTransportUnit, status_code=status.HTTP_201_CREATED)
+def create_transport_unit(unit: MasterTransportUnitCreate, db: Session = Depends(get_db)):
+    db_unit = MasterTransportUnitDB(**unit.dict())
+    db.add(db_unit)
+    db.commit()
+    db.refresh(db_unit)
+    return db_unit
+
+@app.get("/setups/production/", response_model=List[SavedProductionSetupInfo])
+def get_all_production_setups(db: Session = Depends(get_db)):
+    setups = db.query(ProductionSimulationConfigDB).all()
+    return [SavedProductionSetupInfo.from_orm(s) for s in setups]
+
+@app.get("/setups/logistics/", response_model=List[SavedLogisticsSetupInfo])
+def get_all_logistics_setups(db: Session = Depends(get_db)):
+    setups = db.query(LogisticsSimulationConfigDB).all()
+    return [SavedLogisticsSetupInfo.from_orm(s) for s in setups]
+
 
 # --- File Upload Endpoints ---
 
@@ -324,6 +360,39 @@ def get_schedule_summary(filename: str):
     except Exception as e:
         logger.error(f"Error generating schedule summary: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to parse schedule file: {str(e)}")
+
+@app.get("/data/bom/summary")
+def get_bom_summary(filename: str):
+    bom_file_path = os.path.join(PROJECT_ROOT, filename)
+    if not os.path.exists(bom_file_path):
+        raise HTTPException(status_code=404, detail=f"BOM file '{filename}' not found.")
+    
+    bom_data = load_bom(bom_file_path)
+    parent_parts = len(bom_data)
+    total_components = sum(len(components) for components in bom_data.values())
+    
+    return {
+        "summary": {
+            "filename": filename,
+            "parent_parts": parent_parts,
+            "total_components": total_components
+        }
+    }
+
+@app.get("/data/mrp/summary")
+def get_mrp_summary(filename: str):
+    mrp_file_path = os.path.join(PROJECT_ROOT, filename)
+    if not os.path.exists(mrp_file_path):
+        raise HTTPException(status_code=404, detail=f"MRP file '{filename}' not found.")
+    
+    mrp_data = load_mrp_data(mrp_file_path)
+    
+    return {
+        "summary": {
+            "filename": filename,
+            "total_materials": len(mrp_data)
+        }
+    }
 
 @app.get("/debug/schedule")
 def debug_schedule(filename: str):

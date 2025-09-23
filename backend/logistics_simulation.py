@@ -80,7 +80,8 @@ class LogisticsSimulationEngine:
         
         # If a production engine is present, this is an integrated run.
         # Ignore pre-set tasks and rely solely on dynamic requests.
-        if production_engine:
+        self.integrated_mode = production_engine is not None
+        if self.integrated_mode:
             self.available_tasks: Deque[TransportTask] = deque()
             self._log("Integrated mode: Ignoring pre-set tasks. Waiting for dynamic requests.")
         else:
@@ -110,6 +111,7 @@ class LogisticsSimulationEngine:
                 full_destination = request.get('destination')
                 parent_part = request.get('parent_part')
 
+                print(f"DEBUG: Processing material request: {request}")
                 if not all([material, quantity_needed, full_destination]):
                     self._log(f"Invalid material request: {request}")
                     print(f"Invalid material request: {request}")
@@ -126,13 +128,15 @@ class LogisticsSimulationEngine:
                         if line_name in lines:
                             destination_location_name = loc_name
                             break
-                
+
                 if not destination_location_name:
                     self._log(f"Warning: Could not find master location for line '{line_name}' from destination '{full_destination}'. Falling back to line name.")
                     destination_location_name = line_name if line_name else full_destination
 
-
                 origin = self.mrp_data.get(material, {}).get('issue_location', 'WAREHOUSE')
+                if not origin:
+                    origin = 'WAREHOUSE'
+                print(f"DEBUG: Origin for {material}: {origin}, Destination: {destination_location_name}")
 
                 # Create tasks, now with correct destination and target_process
                 unit_names = list(self.transport_units_map.keys())
@@ -155,8 +159,10 @@ class LogisticsSimulationEngine:
                     self.available_tasks.append(new_task)
                     processed_requests += 1
                     self._log(f"Processed request: Deliver 1 lot of {material} to {destination_location_name} (Process: {process_name})")
+                    print(f"DEBUG: Created task for {material} to {destination_location_name}")
             except Exception as e:
                 self._log(f"Error processing material request: {e}")
+                print(f"DEBUG: Error processing request: {e}")
 
         if processed_requests > 0:
             print(f"Logistics: Processed {processed_requests} material requests this step")
@@ -203,29 +209,43 @@ class LogisticsSimulationEngine:
 
         # Refactored Task Assignment Logic
         idle_units = [name for name, status in self.transport_units_status.items() if status["status"] == "idle"]
+        print(f"DEBUG: Idle units: {idle_units}")
+        print(f"DEBUG: Available tasks: {len(self.available_tasks)}")
         assigned_count = 0
-        
+
         if idle_units and self.available_tasks:
             tasks_to_assign = list(self.available_tasks)
-            
+            print(f"DEBUG: Tasks to assign: {len(tasks_to_assign)}")
+
             for task in tasks_to_assign:
                 if not idle_units:
                     break  # No more idle units
 
                 # Assign the task to the next available idle unit
                 unit_name = idle_units.pop(0)
-                
+                print(f"DEBUG: Assigning task {task.material} to unit {unit_name}")
+
                 self.in_progress_tasks[id(task)] = task
                 self.available_tasks.remove(task)
 
                 unit_status = self.transport_units_status[unit_name]
                 unit_status["current_task"] = task
-                unit_status["status"] = "loading"
-                unit_status["progress"] = 0
+                # Check if unit is at origin location before loading
+                if unit_status["current_location"] == task.origin:
+                    unit_status["status"] = "loading"
+                    unit_status["progress"] = 0
+                    self._log(f"Unit {unit_name} assigned to task for {task.material}. Starts loading at {task.origin}.")
+                    print(f"DEBUG: Unit {unit_name} starts loading at {task.origin}")
+                else:
+                    # If not at origin, set status to traveling_to_origin first
+                    unit_status["status"] = "traveling_to_origin"
+                    unit_status["progress"] = 0
+                    self._log(f"Unit {unit_name} traveling to origin {task.origin} before loading {task.material}.")
+                    print(f"DEBUG: Unit {unit_name} traveling to origin {task.origin}")
+
                 unit_status["current_load_carried_by_unit"] = {task.material: task.lots_required}
-                
+
                 assigned_count += 1
-                self._log(f"Unit {unit_name} assigned to task for {task.material}. Starts loading at {task.origin}.")
 
         if assigned_count > 0:
             print(f"Logistics: Assigned {assigned_count} transport units to tasks this step")
@@ -255,7 +275,12 @@ class LogisticsSimulationEngine:
             unit_status["progress"] += 1
             
             try:
-                if unit_status["status"] == "loading" and unit_status["progress"] >= task.loading_time:
+                if unit_status["status"] == "traveling_to_origin" and unit_status["progress"] >= task.travel_time:
+                    unit_status["status"] = "loading"
+                    unit_status["progress"] = 0
+                    self._log(f"Unit {unit_name} arrived at origin {task.origin} and starts loading {task.material}.")
+
+                elif unit_status["status"] == "loading" and unit_status["progress"] >= task.loading_time:
                     unit_status["status"] = "traveling"
                     unit_status["progress"] = 0
                     self._log(f"Unit {unit_name} traveling to {task.destination} with {task.material}.")
@@ -354,7 +379,9 @@ class LogisticsSimulationEngine:
         status = unit_status["status"]
         progress = unit_status["progress"]
 
-        if status == "loading":
+        if status == "traveling_to_origin":
+            return min(100, (progress / task.travel_time) * 100)
+        elif status == "loading":
             return min(100, (progress / task.loading_time) * 100)
         elif status == "traveling":
             return min(100, (progress / task.travel_time) * 100)

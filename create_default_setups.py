@@ -109,7 +109,7 @@ def create_default_logistics_setup():
 
 def main():
     """Create default setups in database"""
-    print("🔧 Creating default setups for integrated simulation...")
+    print("Creating default setups for integrated simulation...")
 
     # Create database tables
     create_db_and_tables()
@@ -135,9 +135,9 @@ def main():
             config_data=json.dumps(prod_setup)
         )
         db.add(db_prod_setup)
-        print("✅ Created default production setup")
+        print("Created default production setup")
     else:
-        print("ℹ️  Default production setup already exists")
+        print("Default production setup already exists")
     
     # Create logistics setup if not exists
     if not existing_log:
@@ -148,16 +148,16 @@ def main():
             config_data=json.dumps(log_setup)
         )
         db.add(db_log_setup)
-        print("✅ Created default logistics setup")
+        print("Created default logistics setup")
     else:
-        print("ℹ️  Default logistics setup already exists")
+        print("Default logistics setup already exists")
     
     # Commit changes
     db.commit()
     
-    print("\n🎉 Default setups created successfully!")
-    print("📋 You can now use these setups for integrated simulation testing")
-    print("🌐 Open http://localhost:3001 and select 'Integrated Simulation'")
+    print("\nDefault setups created successfully!")
+    print("You can now use these setups for integrated simulation testing")
+    print("Open http://localhost:3001 and select 'Integrated Simulation'")
 
 if __name__ == "__main__":
     main()

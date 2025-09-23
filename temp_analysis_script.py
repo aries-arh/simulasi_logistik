@@ -1,133 +1,100 @@
+
 import pandas as pd
-import csv
-from collections import defaultdict
+import json
+import sys
 import os
+from datetime import datetime
 
-# Define file paths (using the user's provided paths)
-CURRENT_SCHEDULE_FILE = "D:\\APLIKASI PYTHON\\production_simulator13\\20250915-Schedule FA1.csv"
-CURRENT_MRP_FILE = "D:\\APLIKASI PYTHON\\production_simulator13\\MRP_20250915.txt"
-CURRENT_BOM_FILE = "D:\\APLIKASI PYTHON\\production_simulator13\\YMATP0200B_BOM_20250914_225614.txt"
+# Add backend to path to allow importing from data_loader
+sys.path.append(os.path.join(os.path.dirname(__file__), 'backend'))
 
-def load_schedule(schedule_file_path):
+try:
+    from data_loader import load_schedule
+except ImportError as e:
+    print(f"Failed to import load_schedule: {e}")
+    print("Please ensure you are running this script from the project root directory.")
+    sys.exit(1)
+
+def analyze_setup_mismatch():
     try:
-        df = pd.read_csv(schedule_file_path, header=2, encoding='latin-1')
-        df = df[[' LINE ', ' PART NO ', ' MODEL ', '15-Sep', ' ST ']].copy()
-        df.columns = ['LINE', 'PART NO', 'MODEL', 'SCH_Mon', 'ST']
-        df.dropna(how='all', inplace=True)
-        df = df[~df['LINE'].astype(str).str.contains('TOTAL', na=False)]
+        # 1. Read Schedule File using the project's own loader
+        schedule_file = '20250912-Schedule FA1.csv'
+        schedule_df = load_schedule(schedule_file)
+
+        if schedule_df.empty:
+            print("Gagal memuat jadwal menggunakan data_loader.load_schedule.")
+            return
+
+        # Determine today's schedule column (e.g., SCH_Fri)
+        day_column_map = { 4: 'SCH_Fri' } # Friday is weekday 4
+        today_weekday = datetime.now().weekday()
+        today_column = day_column_map.get(today_weekday)
+
+        if not today_column or today_column not in schedule_df.columns:
+            print(f"Kolom jadwal untuk hari ini ('{today_column}') tidak ditemukan di file jadwal.")
+            # As a fallback, let's just check for any schedule column
+            sched_cols = [col for col in schedule_df.columns if col.startswith('SCH_')]
+            if not sched_cols:
+                print("Tidak ada kolom SCH_ (jadwal) yang ditemukan sama sekali.")
+                return
+            today_column = sched_cols[0]
+            print(f"Menggunakan kolom jadwal pertama yang ditemukan sebagai gantinya: {today_column}")
+
+
+        schedule_df[today_column] = pd.to_numeric(schedule_df[today_column], errors='coerce').fillna(0)
         
-        # NEW FILTER: Remove rows where 'PART NO' is empty or NaN
-        df = df.dropna(subset=['PART NO'])
-        df = df[df['PART NO'].astype(str).str.strip() != '']
-
-        df['SCH_Mon'] = pd.to_numeric(df['SCH_Mon'], errors='coerce').fillna(0)
-        df['ST'] = pd.to_numeric(df['ST'], errors='coerce').fillna(60)
-        return df
-    except Exception as e:
-        print(f"Error loading schedule: {e}")
-        return pd.DataFrame()
-
-def load_mrp_data(mrp_file_path):
-    mrp_data = {}
-    try:
-        with open(mrp_file_path, 'r', encoding='latin-1') as f:
-            headers = f.readline().strip().split('\t')
-            reader = csv.reader(f, delimiter='\t')
-            material_col_idx = headers.index('Material') if 'Material' in headers else 3
-            issue_location_col_idx = headers.index('Iss. Stor, loc') if 'Iss. Stor, loc' in headers else 18
-            rounding_value_col_idx = headers.index('Rounding val.') if 'Rounding val.' in headers else 9
-
-            for row in reader:
-                if len(row) > max(material_col_idx, issue_location_col_idx, rounding_value_col_idx):
-                    material_number = row[material_col_idx].strip()
-                    issue_location = row[issue_location_col_idx].strip()
-                    try:
-                        rounding_value = float(row[rounding_value_col_idx].strip().replace(',', ''))
-                    except (ValueError, IndexError):
-                        rounding_value = 0.0
-                    if material_number:
-                        if material_number not in mrp_data:
-                            mrp_data[material_number] = {
-                                "issue_location": issue_location,
-                                "rounding_value": rounding_value
-                            }
-        return mrp_data
-    except Exception as e:
-        print(f"Error loading MRP data: {e}")
-        return {}
-
-def load_bom(bom_file_path):
-    bom_data = defaultdict(list)
-    try:
-        with open(bom_file_path, 'r', encoding='latin-1') as f:
-            for line_num, line in enumerate(f):
-                if line_num < 1: # Skip header line if any
-                    continue
-                if len(line) < 80: # Basic check for line length
-                    continue
-                parent_part = line[0:16].strip()
-                component_part = line[16:32].strip()
-                quantity = 1.0
-                if parent_part and component_part:
-                    bom_data[parent_part].append({
-                        "component": component_part,
-                        "quantity": quantity
-                    })
-        return bom_data
-    except Exception as e:
-        print(f"Error loading BOM data: {e}")
-        return defaultdict(list)
-
-# --- Main analysis logic ---
-print("Starting file analysis...")
-
-schedule_df = load_schedule(CURRENT_SCHEDULE_FILE)
-mrp_data = load_mrp_data(CURRENT_MRP_FILE)
-bom_data = load_bom(CURRENT_BOM_FILE)
-
-print(f"Schedule loaded: {not schedule_df.empty} (Rows: {len(schedule_df)}) ")
-print(f"MRP loaded: {bool(mrp_data)} (Materials: {len(mrp_data)}) ")
-print(f"BOM loaded: {bool(bom_data)} (Parent Parts: {len(bom_data)}) ")
-
-results = []
-# Take a sample of part numbers from the schedule
-# Ensure schedule_df is not empty before trying to access columns
-if not schedule_df.empty and 'PART NO' in schedule_df.columns:
-    sample_part_nos = schedule_df['PART NO'].unique()[:5] # First 5 unique part numbers
-
-    for part_no in sample_part_nos:
-        parent_info = {
-            "part_no": part_no,
-            "line": schedule_df[schedule_df['PART NO'] == part_no]['LINE'].iloc[0] if not schedule_df[schedule_df['PART NO'] == part_no].empty else "N/A",
-            "model": schedule_df[schedule_df['PART NO'] == part_no]['MODEL'].iloc[0] if not schedule_df[schedule_df['PART NO'] == part_no].empty else "N/A",
-            "components": []
-        }
-        
-        components_in_bom = bom_data.get(part_no, [])
-        if components_in_bom:
-            for comp_item in components_in_bom:
-                component = comp_item["component"]
-                component_info = {
-                    "component_part": component,
-                    "quantity_needed": comp_item["quantity"],
-                    "mrp_area": "N/A"
-                }
-                
-                mrp_info = mrp_data.get(component)
-                if mrp_info:
-                    component_info["mrp_area"] = mrp_info["issue_location"]
-                
-                parent_info["components"].append(component_info)
+        scheduled_lines = set(
+            schedule_df[schedule_df[today_column] > 0]['LINE'].dropna().astype(str).str.strip()
+        )
+        print(f"--- Analisis Jadwal Produksi ({today_column}) ---")
+        if not scheduled_lines:
+            print(f"Tidak ditemukan lini dengan jadwal > 0 untuk kolom '{today_column}'.")
         else:
-            parent_info["components"].append({"component_part": "No BOM found", "quantity_needed": "N/A", "mrp_area": "N/A"})
-        
-        results.append(parent_info)
+            print(f"Ditemukan {len(scheduled_lines)} lini yang dijadwalkan:")
+            for line in sorted(list(scheduled_lines)):
+                print(f"- {line}")
 
-    print("\n--- Sample of Relationships (Schedule -> BOM -> MRP) ---")
-    for item in results:
-        print(f"Product: {item['part_no']} (Line: {item['line']}, Model: {item['model']})")
-        for comp in item['components']:
-            print(f"  -> Component: {comp['component_part']} (Qty: {comp['quantity_needed']}, MRP Area: {comp['mrp_area']})")
-        print("-" * 30)
-else:
-    print("Schedule DataFrame is empty or 'PART NO' column is missing. Cannot perform analysis.")
+        # 2. Read Production Setup File
+        setup_file = 'production_setup.json'
+        with open(setup_file, 'r') as f:
+            setup_data = json.load(f)
+        
+        configured_lines = set(
+            key.strip() for key in setup_data.get("setup_data", {}).get("line_processes", {}).keys()
+        )
+        print(f"\n--- Analisis Konfigurasi Proses Produksi ---")
+        if not configured_lines:
+            print("Tidak ditemukan lini yang memiliki konfigurasi proses di production_setup.json.")
+        else:
+            print(f"Ditemukan {len(configured_lines)} lini yang dikonfigurasi:")
+            for line in sorted(list(configured_lines)):
+                print(f"- {line}")
+
+        # 3. Find and Report Mismatches
+        print(f"\n--- Laporan Ketidakcocokan ---")
+        
+        lines_in_schedule_but_not_config = scheduled_lines - configured_lines
+        if lines_in_schedule_but_not_config:
+            print(f"\nCRITICAL WARNING: Ditemukan {len(lines_in_schedule_but_not_config)} lini yang ada di JADWAL tapi TIDAK ADA di KONFIGURASI.")
+            print("Ini adalah penyebab masalah. Nama harus cocok persis (setelah mengabaikan spasi).")
+            for line in sorted(list(lines_in_schedule_but_not_config)):
+                print(f"  -> Lini terjadwal '{line}' tidak ditemukan dalam konfigurasi.")
+        else:
+            print("INFO: Semua lini yang dijadwalkan memiliki konfigurasi proses yang cocok (dibandingkan dengan production_setup.json).")
+
+        lines_in_config_but_not_schedule = configured_lines - scheduled_lines
+        if lines_in_config_but_not_schedule:
+            print(f"\nINFO: Ditemukan {len(lines_in_config_but_not_schedule)} lini yang ada di KONFIGURASI tapi tidak memiliki jadwal hari ini.")
+            # for line in sorted(list(lines_in_config_but_not_schedule)):
+            #     print(f"  - '{line}'")
+        
+        if not lines_in_schedule_but_not_config:
+            print("\nKESIMPULAN: Tidak ditemukan ketidakcocokan nama baris antara jadwal hari ini dan file production_setup.json.")
+            print("Jika masalah berlanjut, kemungkinan konfigurasi produksi yang sebenarnya dimuat dari DATABASE, bukan dari file .json.")
+            print("Pastikan nama baris di UI manajemen skenario cocok dengan nama baris di file jadwal Anda.")
+
+    except Exception as e:
+        print(f"Terjadi kesalahan saat analisis: {e}")
+
+if __name__ == "__main__":
+    analyze_setup_mismatch()

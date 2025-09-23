@@ -135,6 +135,8 @@ const LogisticsSetupForm = ({ onStart, initialData, onBack, onManageMasterData }
     tasks: tasks.map(task => ({
         origin: task.origin,
         destination: task.destination,
+        material: task.material || 'DEFAULT_MATERIAL', // Add missing field
+        lots_required: task.lots_required || 1, // Add missing field
         distance: task.distance,
         travel_time: task.travel_time,
         loading_time: task.loading_time,
@@ -322,7 +324,7 @@ const LogisticsSetupForm = ({ onStart, initialData, onBack, onManageMasterData }
           <button type="button" className="btn btn-info w-100 mb-3" onClick={handleAddTask}>+ Tambah Tugas</button>
 
           <div className="d-grid gap-2 mt-4">
-            <button type="submit" className="btn btn-primary fw-bold">Mulai Simulasi dengan Perbandingan Data</button>
+            <button type="submit" className="btn btn-primary fw-bold" disabled>Mulai Simulasi dengan Perbandingan Data (Dinonaktifkan)</button>
             <button type="button" className="btn btn-info" onClick={handleSave}>Simpan Skenario</button>
           </div>
         </form>
