@@ -26,12 +26,11 @@ def load_bom(bom_file_path):
                 parent_part = line[0:16].strip()
                 component_part = line[16:32].strip()
 
-                # Correctly parse quantity from positions 78-85 (approximate) and apply scaling
+                # Correctly parse quantity from positions 78-85 (approximate)
                 quantity_str = line[78:85].strip()
                 if quantity_str:
                     try:
-                        # Assume quantity is scaled by 1,000,000
-                        quantity = float(quantity_str) / 1000000.0
+                        quantity = float(quantity_str)
                     except ValueError:
                         quantity = 1.0 # Fallback if parsing fails
                 else:
@@ -102,50 +101,102 @@ def load_schedule(schedule_file_path):
     """
     Loads the production schedule from a CSV file. This function is specifically
     tailored to handle the multi-row header format of the given schedule file.
-
-    Args:
-        schedule_file_path (str): The absolute path to the schedule CSV file.
-
-    Returns:
-        pandas.DataFrame: A DataFrame containing the cleaned schedule data,
-                          or an empty DataFrame if loading fails.
+    It dynamically finds header rows and constructs a clean DataFrame.
     """
     try:
-        # The actual data starts from the 5th row (index 4)
-        df = pd.read_csv(schedule_file_path, skiprows=4, header=None, encoding='latin-1')
+        with open(schedule_file_path, 'r', encoding='latin-1') as f:
+            reader = csv.reader(f)
+            lines = list(reader)
 
-        # Manually define the column headers based on the file structure
-        columns = [
-            'LINE', 'PART NO', 'MODEL', 'SPEC', 'PEDAL', 'SCREW SET', 'KEYBOARD', 
-            'NO PART KEYBOARD', 'NO. URUT', 'SCH_Sun', 'SCH_Mon', 'SCH_Tue', 
-            'SCH_Wed', 'SCH_Thu', 'SCH_Fri', 'SCH_Sat', 'TOTAL', 'GROUP_KERJA', 
-            'Wkt_kerja', 'Target_Eff_Direct', 'Jmlh_Group', 'Jml_Opr_Direct', 'ST', 'Beban'
-        ]
-        # The file has many more columns than defined, add placeholders
-        num_unnamed_cols = len(df.columns) - len(columns)
-        if num_unnamed_cols > 0:
-            columns.extend([f'Unnamed_{i}' for i in range(num_unnamed_cols)])
+        # Find the primary header row index
+        header_row_idx = -1
+        for i, row in enumerate(lines):
+            row_stripped = [item.strip() for item in row]
+            if 'PART NO' in row_stripped and 'NO. URUT' in row_stripped:
+                header_row_idx = i
+                break
         
-        df.columns = columns
+        if header_row_idx == -1:
+            raise ValueError("Could not find the main header row containing 'PART NO'.")
 
-        # Forward-fill the LINE column to handle merged cells from Excel
-        df['LINE'].ffill(inplace=True)
-        # Strip whitespace from line names
-        df['LINE'] = df['LINE'].str.strip()
-        # Strip whitespace from PART NO
-        df['PART NO'] = df['PART NO'].astype(str).str.strip()
+        # Extract header lines
+        main_header = [h.strip().replace('"' , '') for h in lines[header_row_idx]]
+        day_header = [h.strip() for h in lines[header_row_idx + 2]]
 
-        # Drop rows that are entirely empty or are summary rows
-        df.dropna(how='all', inplace=True)
-        df = df[~df['LINE'].astype(str).str.contains('TOTAL', na=False)]
+        # Find column indices for ST and Takt Time
+        st_col_idx = -1
+        takt_time_col_idx = -1
+        for i, h in enumerate(main_header):
+            if h == 'ST':
+                st_col_idx = i
+            elif h.startswith('TAKT TIME PER MODEL'):
+                takt_time_col_idx = i
         
-        # Clean and convert schedule columns to numeric
-        schedule_columns = ['SCH_Sun', 'SCH_Mon', 'SCH_Tue', 'SCH_Wed', 'SCH_Thu', 'SCH_Fri', 'SCH_Sat']
-        for col in schedule_columns:
-            if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
+        if st_col_idx == -1:
+            raise ValueError("Could not find 'ST' column in the header.")
+        if takt_time_col_idx == -1:
+            raise ValueError("Could not find 'TAKT TIME PER MODEL' column in the header.")
+
+        # Find schedule column indices
+        sch_col_indices = {}
+        for day in ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']:
+            try:
+                idx = day_header.index(day)
+                sch_col_indices[f"SCH_{day}"] = idx
+            except ValueError:
+                pass
+
+        # Data starts after all header rows
+        data_start_idx = header_row_idx + 3
+        
+        # Process data rows
+        data = []
+        current_line = ''
+        for row in lines[data_start_idx:]:
+            if not any(row): # Skip empty rows
+                continue
+
+            if row[0]:
+                current_line = row[0].strip()
+            
+            if len(row) <= max(st_col_idx, takt_time_col_idx) or not row[1]: # Skip rows without a part number or essential columns
+                continue
+
+            part_no = row[1].strip()
+            model = row[2].strip()
+            no_urut = row[8].strip()
+            
+            try:
+                st_val = float(row[st_col_idx].strip()) * 60
+            except (ValueError, IndexError):
+                st_val = 60.0
+
+            try:
+                takt_time_val = float(row[takt_time_col_idx].strip()) * 60
+            except (ValueError, IndexError):
+                takt_time_val = 0.0
+
+            record = {
+                'LINE': current_line,
+                'PART NO': part_no,
+                'MODEL': model,
+                'NO. URUT': no_urut,
+                'ST': st_val,
+                'TAKT_TIME': takt_time_val
+            }
+
+            for sch_col_name, sch_col_idx in sch_col_indices.items():
+                try:
+                    record[sch_col_name] = int(row[sch_col_idx].strip())
+                except (ValueError, IndexError):
+                    record[sch_col_name] = 0
+            
+            data.append(record)
+
+        df = pd.DataFrame(data)
         
         return df
+
     except FileNotFoundError:
         print(f"Error: Schedule file not found at {schedule_file_path}")
         return pd.DataFrame()

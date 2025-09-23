@@ -85,6 +85,10 @@ const ProcessCard = memo(({ processData }) => (
         <MaterialsWaiting materials={processData.materials_waiting_for} />
       }
     </div>
+    <div className="border-top mt-3 pt-2">
+        <small className="text-muted d-block">Input Dari: <strong>{processData.input_from.join(', ') || 'Awal'}</strong></small>
+        <small className="text-muted d-block">Output Ke: <strong>{processData.output_to.join(', ') || 'Akhir'}</strong></small>
+    </div>
   </div>
 ));
 
@@ -97,6 +101,17 @@ const ProductionLine = memo(({ lineName, lineData }) => (
             </span>
         </div>
         <div className="card-body">
+            {lineData.current_order && (
+                <div className="alert alert-info mb-3">
+                    <h5 className="alert-heading">Order Saat Ini:</h5>
+                    <p className="mb-1">Part No: <strong>{lineData.current_order.part_no}</strong></p>
+                    <p className="mb-1">Model: <strong>{lineData.current_order.model}</strong></p>
+                    <p className="mb-1">Urutan Jadwal: <strong>{lineData.current_order.sequence_no}</strong></p>
+                    <p className="mb-1">ST (Standard Time): <strong>{lineData.current_order.st} detik</strong></p>
+                    <p className="mb-1">Takt Time: <strong>{lineData.current_order.takt_time} detik</strong></p>
+                    <p className="mb-0">Total Target Lini Hari Ini: <strong>{lineData.current_order.total_line_target}</strong> Unit</p>
+                </div>
+            )}
             <div className="row">
                 {Object.values(lineData.processes).map(processData => (
                     <div key={processData.name} className="col-md-6 mb-4">
@@ -122,10 +137,11 @@ const ProductionSimulationDisplay = ({ config, onBack }) => {
         // Menggunakan file yang dipilih dalam config
         const runConfig = {
             ...config,
-            schedule_file: config.scheduleFile, // pastikan nama field sesuai dengan yang diharapkan backend
-            bom_file: config.bomFile
+            schedule_file: config.schedule_file,
+            bom_file: config.bom_file
         };
-        await axios.post(`${API_URL}/production/run`, runConfig);
+        console.log("Configuration being sent to /v2/production/run:", runConfig);
+        await axios.post(`${API_URL}/v2/production/run`, runConfig);
         fetchStatus();
         intervalId = setInterval(fetchStatus, 1000);
       } catch (err) {
@@ -137,20 +153,22 @@ const ProductionSimulationDisplay = ({ config, onBack }) => {
 
     const fetchStatus = async () => {
       try {
-        const response = await axios.get(`${API_URL}/production/status`);
+        const response = await axios.get(`${API_URL}/v2/production/status`);
         const newStatus = response.data;
         setStatus(newStatus);
 
         // Kumpulkan data untuk grafik
-        setHistoryData(prev => {
-            const newHistory = [...prev, {
-                time: newStatus.current_time,
-                completed_units: newStatus.completed_units,
-                scrapped_units: newStatus.scrapped_units,
-            }];
-            // Batasi history untuk performa
-            return newHistory.slice(-300);
-        });
+        if (newStatus && newStatus.current_time) {
+            setHistoryData(prev => {
+                const newHistory = [...prev, {
+                    time: newStatus.current_time,
+                    completed_units: newStatus.completed_units,
+                    scrapped_units: newStatus.scrapped_units,
+                }];
+                // Batasi history untuk performa
+                return newHistory.slice(-300);
+            });
+        }
 
         if (newStatus.status === 'finished') {
           clearInterval(intervalId);
@@ -168,7 +186,7 @@ const ProductionSimulationDisplay = ({ config, onBack }) => {
       if (intervalId) {
         clearInterval(intervalId);
         // Minta server untuk menghentikan simulasi saat komponen di-unmount
-        axios.post(`${API_URL}/production/stop`).catch(err => console.error("Gagal menghentikan simulasi:", err));
+        axios.post(`${API_URL}/v2/production/stop`).catch(err => console.error("Gagal menghentikan simulasi:", err));
       }
     };
   }, [config]);
@@ -227,6 +245,27 @@ const ProductionSimulationDisplay = ({ config, onBack }) => {
       <div className="row text-center mb-4">
           <div className="col-md-4">
             <div className="metric-card h-100">
+              <div className="metric-label">WAKTU SIMULASI</div>
+              <div className="metric-value small text-secondary">{status.simulation_timestamp}</div>
+            </div>
+          </div>
+          <div className="col-md-4">
+            <div className="metric-card h-100">
+              <div className="metric-label">HARI KE</div>
+              <div className="metric-value text-info">{status.current_day}</div>
+            </div>
+          </div>
+          <div className="col-md-4">
+            <div className="metric-card h-100">
+              <div className="metric-label">SHIFT SAAT INI</div>
+              <div className="metric-value text-info">{status.current_shift_name}</div>
+            </div>
+          </div>
+        </div>
+
+      <div className="row text-center mb-4">
+          <div className="col-md-4">
+            <div className="metric-card h-100">
               <div className="metric-label">PROGRES TOTAL</div>
               <div className="metric-value text-primary">{totalProcessed} / {totalTarget}</div>
               <div className="progress-modern mt-3">
@@ -250,7 +289,9 @@ const ProductionSimulationDisplay = ({ config, onBack }) => {
 
       <hr />
 
-      {status.lines && Object.entries(status.lines).map(([lineName, lineData]) => (
+      {status.lines && Object.entries(status.lines)
+          .sort(([lineNameA], [lineNameB]) => lineNameA.localeCompare(lineNameB))
+          .map(([lineName, lineData]) => (
           <ProductionLine key={lineName} lineName={lineName} lineData={lineData} />
       ))}
 
