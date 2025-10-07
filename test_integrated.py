@@ -13,13 +13,16 @@ sys.path.append(os.path.join(os.path.dirname(__file__), 'backend'))
 from backend.models import SimulationSetup, LogisticsSimulationSetup, ProcessConfig, Location, TransportUnit, TransportTask
 from backend.simulation import SimulationEngine
 from backend.logistics_simulation import LogisticsSimulationEngine
+from backend.bom_service import BOMService # Import BOMService
 
 def test_integrated_simulation():
-    print("🔍 Testing integrated simulation...")
+    print("Testing integrated simulation...")
 
     try:
         # Create production setup
-        prod_setup = SimulationSetup(line_processes={
+        prod_setup = SimulationSetup(
+            target_date="2025-10-07", # Set target date to today
+            line_processes={
             "FA1-L01": [
                 ProcessConfig(
                     name="Assembly",
@@ -70,11 +73,14 @@ def test_integrated_simulation():
 
         material_queue = deque()
 
+        # Create BOM Service
+        bom_service = BOMService()
+
         # Start production
         prod_engine = SimulationEngine(
             setup=prod_setup,
-            schedule_file="20250912-Schedule FA1.csv",
-            bom_file="YMATP0200B_BOM_20250911_231232.txt",
+            schedule_file="02. Schedule dan Urutan Produksi FA1 06 OKTOBER - 10 OKTOBER 2025 R0.xls",
+            bom_service=bom_service, # Use bom_service
             material_request_queue=material_queue
         )
 
@@ -86,7 +92,7 @@ def test_integrated_simulation():
             mrp_file="MRP_20250912.txt"
         )
 
-        print("✅ Engines initialized.")
+        print("Engines initialized.")
 
         # Run a few steps
         for step in range(50):
@@ -104,7 +110,7 @@ def test_integrated_simulation():
             print(f"  {name}: {status['status']} at {status['current_location']}")
 
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"Error: {e}")
         import traceback
         traceback.print_exc()
 

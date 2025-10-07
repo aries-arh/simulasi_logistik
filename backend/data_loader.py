@@ -1,54 +1,23 @@
-
 import pandas as pd
 from collections import defaultdict
 import csv
+import os
+from datetime import datetime
 
-def load_bom(bom_file_path):
-    """
-    Loads the Bill of Materials (BOM) from a text file.
-
-    This function is designed to parse a fixed-width BOM report file based on the sample provided.
-    It parses parent, component, and quantity from specific positions.
-
-    Args:
-        bom_file_path (str): The absolute path to the BOM text file.
-
-    Returns:
-        defaultdict: A dictionary mapping parent parts to a list of their components with quantities.
-    """
-    bom_data = defaultdict(list)
+def parse_time_to_seconds(val):
     try:
-        with open(bom_file_path, 'r', encoding='latin-1') as f:
-            for line in f:
-                if len(line) < 85: # Increased sanity check for line length
-                    continue
+        if pd.isna(val): return 0.0
+        s = str(val).strip()
+        if not s or s == '-': return 0.0
+        if ':' in s:
+            parts = [float(p) for p in s.split(':') if p.replace('.', '', 1).isdigit()]
+            if len(parts) == 3: return parts[0] * 3600 + parts[1] * 60 + parts[2]
+            if len(parts) == 2: return parts[0] * 60 + parts[1]
+            if len(parts) == 1: return parts[0]
+        return float(str(val).replace(',', '').strip())
+    except (ValueError, TypeError): return 0.0
 
-                parent_part = line[0:16].strip()
-                component_part = line[16:32].strip()
 
-                # Correctly parse quantity from positions 78-85 (approximate)
-                quantity_str = line[78:85].strip()
-                if quantity_str:
-                    try:
-                        quantity = float(quantity_str)
-                    except ValueError:
-                        quantity = 1.0 # Fallback if parsing fails
-                else:
-                    quantity = 1.0 # Default if quantity string is empty
-
-                if parent_part and component_part:
-                    bom_data[parent_part].append({
-                        "component": component_part,
-                        "quantity": quantity
-                    })
-    except FileNotFoundError:
-        print(f"Error: BOM file not found at {bom_file_path}")
-    except Exception as e:
-        import traceback
-        print(f"An error occurred while reading the BOM file: {e}")
-        traceback.print_exc()
-
-    return bom_data
 
 def load_mrp_data(mrp_file_path):
     """
@@ -58,7 +27,6 @@ def load_mrp_data(mrp_file_path):
     mrp_data = {}
     try:
         with open(mrp_file_path, 'r', encoding='latin-1') as f:
-            # Read header to find column indices dynamically
             header_line = next(f, None)
             if not header_line:
                 return {}
@@ -99,127 +67,182 @@ def load_mrp_data(mrp_file_path):
 
 def load_schedule(schedule_file_path):
     """
-    Loads the production schedule from a CSV file. This function is specifically
-    tailored to handle the multi-row header format of the given schedule file.
-    It dynamically finds header rows and constructs a clean DataFrame.
+    Loads the production schedule from a CSV or Excel file.
+    This version is designed to handle the specific multi-line header format.
     """
     try:
-        with open(schedule_file_path, 'r', encoding='latin-1') as f:
-            reader = csv.reader(f)
-            lines = list(reader)
-
-        # Find the primary header row index
-        header_row_idx = -1
-        for i, row in enumerate(lines):
-            row_stripped = [item.strip() for item in row]
-            if 'PART NO' in row_stripped and 'NO. URUT' in row_stripped:
-                header_row_idx = i
-                break
+        print(f"--- DEBUG: Loading schedule file: {schedule_file_path} ---")
+        file_extension = os.path.splitext(schedule_file_path)[1].lower()
         
-        if header_row_idx == -1:
-            raise ValueError("Could not find the main header row containing 'PART NO'.")
+        header_rows = [2, 3]
 
-        # Extract header lines
-        main_header = [h.strip().replace('"' , '') for h in lines[header_row_idx]]
-        day_header = [h.strip() for h in lines[header_row_idx + 2]]
+        if file_extension == '.csv':
+            df = pd.read_csv(schedule_file_path, encoding='latin-1', header=header_rows)
+        elif file_extension in ['.xlsx', '.xls']:
+            df = pd.read_excel(schedule_file_path, header=header_rows)
+        else:
+            raise ValueError(f"Unsupported file type: {file_extension}")
 
-        # Find column indices for ST and Takt Time
-        st_col_idx = -1
-        takt_time_col_idx = -1
-        for i, h in enumerate(main_header):
-            if h == 'ST':
-                st_col_idx = i
-            elif h.startswith('TAKT TIME PER MODEL'):
-                takt_time_col_idx = i
-        
-        if st_col_idx == -1:
-            raise ValueError("Could not find 'ST' column in the header.")
-        if takt_time_col_idx == -1:
-            raise ValueError("Could not find 'TAKT TIME PER MODEL' column in the header.")
+        # --- Stage 1: Column Name Processing ---
+        new_cols_tuples = []
+        last_s1 = ''
+        for col1, col2 in df.columns:
+            s1 = str(col1).strip()
+            s2 = str(col2).strip()
+            if not s1.startswith('Unnamed'):
+                last_s1 = s1
+            elif s1.startswith('Unnamed') and last_s1:
+                 s1 = last_s1
+            new_cols_tuples.append((s1, s2))
 
-        # Find schedule column indices
-        sch_col_indices = {}
-        for day in ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']:
+        new_cols = [f"{s1}_{s2}" if not s1.startswith('Unnamed') and not s2.startswith('Unnamed') else s2 if s1.startswith('Unnamed') else s1 for s1, s2 in new_cols_tuples]
+        df.columns = new_cols
+        df.columns = df.columns.str.strip().str.replace('''\n''', ' ', regex=False)
+
+        # --- Stage 2: Rename, Normalize, and De-duplicate Columns ---
+        schedule_cols_to_rename = {}
+        for col in df.columns:
             try:
-                idx = day_header.index(day)
-                sch_col_indices[f"SCH_{day}"] = idx
-            except ValueError:
-                pass
+                date_part_str = col.split('_')[-1]
+                # First, try to parse the full datetime format that might appear in Excel headers
+                parsed_date = pd.to_datetime(date_part_str, format='%Y-%m-%d %H:%M:%S', errors='coerce')
+                
+                # If parsing fails, try the shorter DD-Mon format
+                if pd.isna(parsed_date):
+                    parsed_date = pd.to_datetime(date_part_str, format='%d-%b', errors='coerce')
 
-        # Data starts after all header rows
-        data_start_idx = header_row_idx + 3
-        
-        # Process data rows
-        data = []
-        current_line = ''
-        for row in lines[data_start_idx:]:
-            if not any(row): # Skip empty rows
+                # If a valid date was parsed, rename the column
+                if pd.notna(parsed_date):
+                    date_str_for_col = parsed_date.strftime('%d-%b')
+                    if 'SCHEDULE' in col.upper():
+                        schedule_cols_to_rename[col] = f"SCH_{date_str_for_col}"
+
+            except (ValueError, TypeError):
                 continue
+        df.rename(columns=schedule_cols_to_rename, inplace=True)
 
-            if row[0]:
-                current_line = row[0].strip()
-            
-            if len(row) <= max(st_col_idx, takt_time_col_idx) or not row[1]: # Skip rows without a part number or essential columns
-                continue
+        column_mapping = {
+            'LINE': 'LINE', 'PART NO': 'PART NO', 'MODEL': 'MODEL', 'NO. URUT': 'NO. URUT', 'ST': 'ST',
+            'Takt Time Per Model': 'TAKT_TIME', 'TAKT TIME PER MODEL (BEBAN/TOTAL BEBAN) * WAKTU KERJA/SCH': 'TAKT_TIME',
+            'Takt Time ALL Model': 'TAKT_TIME', 'TAKT TIME ALL MODEL': 'TAKT_TIME', 'Takt Time': 'TAKT_TIME',
+            'GROUP KERJA': 'GROUP_KERJA', 'Group Kerja': 'GROUP_KERJA', 'Jmlh Group': 'JMLH_GROUP',
+            'Jml Group': 'JMLH_GROUP', 'Jml Opr Direct': 'JML_OPR_DIRECT', 'Jml Opr Dir': 'JML_OPR_DIRECT'
+        }
+        df.rename(columns=column_mapping, inplace=True)
 
-            part_no = row[1].strip()
-            model = row[2].strip()
-            no_urut = row[8].strip()
-            
-            try:
-                st_val = float(row[st_col_idx].strip()) * 60
-            except (ValueError, IndexError):
-                st_val = 60.0
+        def norm_key(s: str) -> str:
+            return str(s or '').lower().replace(' ', '').replace('_', '')
+        flex_map = {col: 'GROUP_KERJA' for col in df.columns if 'groupkerja' in norm_key(col)}
+        flex_map.update({col: 'JMLH_GROUP' for col in df.columns if 'jmlhgroup' in norm_key(col)})
+        flex_map.update({col: 'JML_OPR_DIRECT' for col in df.columns if 'jmloprdirect' in norm_key(col)})
+        if flex_map:
+            df.rename(columns=flex_map, inplace=True)
 
-            try:
-                takt_time_val = float(row[takt_time_col_idx].strip()) * 60
-            except (ValueError, IndexError):
-                takt_time_val = 0.0
+        cols = pd.Series(df.columns)
+        for dup in cols[cols.duplicated()].unique():
+            cols[cols[cols == dup].index.values.tolist()] = [f"{dup}.{i}" if i != 0 else dup for i in range(sum(cols == dup))]
+        df.columns = cols
 
-            record = {
-                'LINE': current_line,
-                'PART NO': part_no,
-                'MODEL': model,
-                'NO. URUT': no_urut,
-                'ST': st_val,
-                'TAKT_TIME': takt_time_val
-            }
-
-            for sch_col_name, sch_col_idx in sch_col_indices.items():
-                try:
-                    record[sch_col_name] = int(row[sch_col_idx].strip())
-                except (ValueError, IndexError):
-                    record[sch_col_name] = 0
-            
-            data.append(record)
-
-        df = pd.DataFrame(data)
+        # Consolidate TAKT_TIME columns if duplicates exist
+        takt_time_cols_after_dedup = [col for col in df.columns if col.startswith('TAKT_TIME')]
         
+        if takt_time_cols_after_dedup:
+            # Create a temporary Series to hold the consolidated TAKT_TIME
+            consolidated_takt_time = pd.Series(pd.NA, index=df.index)
+            
+            for col in takt_time_cols_after_dedup:
+                # Fill NaN values in consolidated_takt_time with values from the current TAKT_TIME column
+                consolidated_takt_time = consolidated_takt_time.fillna(df[col])
+            
+            # Drop all original TAKT_TIME columns
+            df.drop(columns=takt_time_cols_after_dedup, errors='ignore', inplace=True)
+            
+            # Assign the consolidated TAKT_TIME back to the DataFrame
+            df['TAKT_TIME'] = consolidated_takt_time
+        else:
+            # If no TAKT_TIME columns were found, create an empty one
+            df['TAKT_TIME'] = pd.Series(pd.NA, index=df.index)
+
+        # Ensure TAKT_TIME is numeric and apply parse_time_to_seconds
+        if 'TAKT_TIME' in df.columns:
+            df['TAKT_TIME'] = df['TAKT_TIME'].apply(parse_time_to_seconds)
+            df['TAKT_TIME'].fillna(0, inplace=True) # Fill any remaining NaN after parsing with 0
+
+        # --- Stage 3: Forward-fill LINE identifier ---
+        if 'LINE' in df.columns:
+            df['LINE'] = df['LINE'].ffill()
+
+        # --- Stage 4: Propagate Metadata BEFORE dropping rows ---
+        # This version uses groupby().agg() to find the single canonical metadata value for each
+        # line, and then uses Series.map() to broadcast that value back to all rows for that line.
+        meta_cols = ['GROUP_KERJA', 'JMLH_GROUP', 'JML_OPR_DIRECT', 'TAKT_TIME']
+        if 'LINE' in df.columns:
+            def get_first_valid(series):
+                """Finds the first non-NA and non-empty-string value in a series."""
+                for v in series:
+                    if pd.notna(v) and str(v).strip():
+                        return v
+                return pd.NA
+
+            for col in meta_cols:
+                if col in df.columns:
+                    # Create a mapping from each LINE to its single valid metadata value
+                    line_to_value_map = df.groupby('LINE')[col].agg(get_first_valid)
+                    
+                    # Apply this map to the LINE column to fill the metadata column
+                    df[col] = df['LINE'].map(line_to_value_map)
+
+        # --- Stage 5: Clean and Filter Rows ---
+        if 'LINE' in df.columns:
+            df['LINE'] = df['LINE'].astype(str).str.strip()
+            # Now that metadata is propagated, we can safely drop rows that are not parts.
+            df.dropna(subset=['PART NO'], inplace=True)
+            df = df[~df['LINE'].str.startswith('TOTAL', na=False)]
+            df = df[df['PART NO'].str.strip() != '']
+
+
+        # --- Stage 5: Final Type Conversion and Cleanup ---
+        if 'ST' in df.columns:
+            df['ST'] = pd.to_numeric(df['ST'], errors='coerce').fillna(1.0) * 60
+        if 'TAKT_TIME' in df.columns:
+            df['TAKT_TIME'] = df['TAKT_TIME'].apply(parse_time_to_seconds)
+            df['TAKT_TIME'].fillna(0, inplace=True)
+        if 'NO. URUT' in df.columns:
+            df['NO. URUT'] = pd.to_numeric(df['NO. URUT'], errors='coerce')
+        if 'GROUP_KERJA' in df.columns:
+            df['GROUP_KERJA'] = df['GROUP_KERJA'].fillna('').astype(str).str.strip()
+        if 'JMLH_GROUP' in df.columns:
+            df['JMLH_GROUP'] = pd.to_numeric(df['JMLH_GROUP'], errors='coerce').fillna(1).astype(int)
+        if 'JML_OPR_DIRECT' in df.columns:
+            df['JML_OPR_DIRECT'] = pd.to_numeric(df['JML_OPR_DIRECT'], errors='coerce').round().fillna(0).astype(int)
+
+        # --- Stage 6: Convert SCH_ columns to numeric ---
+        for col in df.columns:
+            if col.startswith('SCH_'):
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+
+        print("--- DEBUG: TAKT_TIME after all processing ---")
+        print(df[['LINE', 'PART NO', 'TAKT_TIME']].head(50).to_string())
+
+        print("--- DEBUG: TAKT_TIME after all processing ---")
+        print(df[['LINE', 'PART NO', 'TAKT_TIME']].head(50).to_string())
+
         return df
 
-    except FileNotFoundError:
-        print(f"Error: Schedule file not found at {schedule_file_path}")
-        return pd.DataFrame()
     except Exception as e:
-        print(f"An error occurred while reading the schedule file: {e}")
         import traceback
+        print(f"An error occurred while loading schedule: {e}")
         traceback.print_exc()
-        return pd.DataFrame()
+        raise
 
 def get_schedule_summary(schedule_df):
     """
     Get a summary of the production schedule for display purposes.
-    
-    Args:
-        schedule_df (pandas.DataFrame): The schedule DataFrame
-        
-    Returns:
-        dict: Summary statistics of the schedule
     """
     if schedule_df.empty:
         return {}
     
-    schedule_columns = ['SCH_Sun', 'SCH_Mon', 'SCH_Tue', 'SCH_Wed', 'SCH_Thu', 'SCH_Fri', 'SCH_Sat']
+    schedule_columns = [col for col in schedule_df.columns if col.startswith('SCH_')]
     summary = {}
     
     for col in schedule_columns:
@@ -231,63 +254,3 @@ def get_schedule_summary(schedule_df):
             }
     
     return summary
-
-if __name__ == '__main__':
-    # Example usage for testing the data loaders
-    bom_file = 'D:\\APLIKASI PYTHON\\production_simulator12\\YMATP0200B_BOM_20250911_231232.txt'
-    mrp_file = 'D:\\APLIKASI PYTHON\\production_simulator12\\MRP_20250912.txt'
-    schedule_file = 'D:\\APLIKASI PYTHON\\production_simulator12\\20250912-Schedule FA1.csv'
-
-    # --- BOM Data Loading ---
-    print("--- Loading BOM Data ---")
-    bom = load_bom(bom_file)
-    if bom:
-        print(f"Loaded BOM for {len(bom)} parent parts.")
-        # Find a parent that is also in the schedule to make the test relevant
-        schedule_df_test = load_schedule(schedule_file)
-        if not schedule_df_test.empty:
-            scheduled_parts = schedule_df_test['PART NO'].dropna().unique()
-            test_parent = next((part for part in scheduled_parts if part in bom), None)
-            
-            if test_parent:
-                print(f"Example BOM for scheduled part: {test_parent}")
-                for comp in bom[test_parent][:5]: # Print first 5 components
-                    print(f"  - Component: {comp['component']}, Quantity: {comp['quantity']}")
-            else:
-                print("No scheduled parts found in the BOM data for a quick test.")
-        else:
-            print("Could not load schedule to find a relevant part for BOM test.")
-    else:
-        print("BOM data could not be loaded.")
-    print("-" * 25)
-
-    # --- MRP Data Loading ---
-    print("--- Loading MRP Data ---")
-    mrp = load_mrp_data(mrp_file)
-    if mrp:
-        print(f"Loaded MRP data for {len(mrp)} materials.")
-        if bom:
-            # Find a component from the test_parent to check in MRP
-            test_parent_for_mrp = next((part for part in bom if bom[part]), None)
-            if test_parent_for_mrp:
-                components_to_check = [c['component'] for c in bom[test_parent_for_mrp]][:3]
-                print(f"Checking MRP data for components of {test_parent_for_mrp}:")
-                for comp_part in components_to_check:
-                    if comp_part in mrp:
-                        print(f"  - MRP for {comp_part}: {mrp[comp_part]}")
-                    else:
-                        print(f"  - MRP data not found for {comp_part}")
-    else:
-        print("MRP data could not be loaded.")
-    print("-" * 25)
-
-    # --- Schedule Data Loading ---
-    print("--- Loading Schedule Data ---")
-    schedule_df = load_schedule(schedule_file)
-    if not schedule_df.empty:
-        print("Schedule DataFrame shape:", schedule_df.shape)
-        print("Cleaned Schedule Columns:", schedule_df.columns.tolist())
-        print("First 5 rows of cleaned schedule:")
-        print(schedule_df[['PART NO', 'MODEL', 'SCH_Mon', 'SCH_Tue', 'SCH_Wed']].head())
-    else:
-        print("Schedule DataFrame is empty.")

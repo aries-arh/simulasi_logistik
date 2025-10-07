@@ -3,11 +3,12 @@ import math
 from collections import deque, defaultdict
 from datetime import datetime
 from models import SimulationSetup, ProcessConfig
-from data_loader import load_schedule, load_bom
+from data_loader import load_schedule
+from bom_service import BOMService
 import pandas as pd
 
 class SimulationEngine:
-    def __init__(self, setup: SimulationSetup, schedule_file: str, bom_file: str, material_request_queue: deque):
+    def __init__(self, setup: SimulationSetup, schedule_file: str, bom_service: BOMService, material_request_queue: deque):
         self.setup = setup
         self.time = 0
         self.completed_units = 0
@@ -19,10 +20,10 @@ class SimulationEngine:
 
         # Ensure all column names are strings to prevent errors on integer-based columns
         self.schedule_df.columns = self.schedule_df.columns.map(str)
-        self.bom_data = load_bom(bom_file)
+        self.bom_service = bom_service # Use the passed BOM service
         
-        if self.schedule_df.empty or not self.bom_data:
-            raise ValueError("Gagal memuat data jadwal atau BOM. Simulasi tidak dapat dimulai.")
+        if self.schedule_df.empty:
+            raise ValueError("Gagal memuat data jadwal. Simulasi tidak dapat dimulai.")
 
         self.lines = defaultdict(lambda: {
             "production_orders": deque(),
@@ -77,13 +78,27 @@ class SimulationEngine:
         orders_by_line = defaultdict(deque)
         self.schedule_df['ST_numeric'] = pd.to_numeric(self.schedule_df['ST'], errors='coerce').fillna(60)
 
-        # --- CORRECTED LOGIC: Use day of week to find column ---
+        # --- CORRECTED LOGIC: Use target_date from setup if available ---
         from datetime import datetime
-        day_of_week = datetime.now().strftime('%a') # e.g., 'Mon', 'Tue'
-        today_column = f"SCH_{day_of_week}"
+        date_str = None
+        if self.setup.target_date:
+            try:
+                target_dt = datetime.strptime(self.setup.target_date, '%Y-%m-%d')
+                date_str = target_dt.strftime('%d-%b')
+            except ValueError:
+                print(f"WARNING: Invalid target_date format: {self.setup.target_date}. Falling back to current day.")
+        
+        if date_str:
+            schedule_col_base = f"SCH_{date_str}"
+        else:
+            day_of_week = datetime.now().strftime('%a')
+            schedule_col_base = f"SCH_{day_of_week}"
 
-        if today_column not in self.schedule_df.columns:
-            print(f"INFO: No schedule column found for today '{today_column}'. No production orders will be loaded.")
+        # Find the first column that matches the base name
+        today_column = next((col for col in self.schedule_df.columns if col.startswith(schedule_col_base)), None)
+
+        if not today_column:
+            print(f"INFO: No schedule column found starting with '{schedule_col_base}'. No production orders will be loaded.")
             return orders_by_line
 
         print(f"INFO: Loading production orders for today's schedule column: {today_column}")
@@ -209,7 +224,7 @@ class SimulationEngine:
                 order = line_data["production_orders"][0]
                 part_no = order['part_no']
                 print(f"DEBUG: Checking materials for part: {part_no} on line: {line_name}")
-                bom_for_part = self.bom_data.get(part_no, [])
+                bom_for_part = self.bom_service.get_components(part_no)
 
                 if not bom_for_part:
                     print(f"WARNING: No BOM found for part {part_no}. Production will proceed without material consumption.")
@@ -242,7 +257,7 @@ class SimulationEngine:
 
                 # If we have all materials, consume the order and create the unit.
                 consumed_order = line_data["production_orders"].popleft()
-                bom_for_part = self.bom_data.get(consumed_order['part_no'], [])
+                bom_for_part = self.bom_service.get_components(consumed_order['part_no'])
                 for item in bom_for_part:
                     if item['component'] in process_data["stock"]:
                         process_data["stock"][item['component']] -= item['quantity']
